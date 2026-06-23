@@ -63,7 +63,7 @@ class NSpinRPMSystem:
         """Places a local operator into the full Hilbert space."""
         op_list = [qt.qeye(d) for d in self.dims]
         op_list[pos] = op
-        return qt.tensor(op_list)
+        return qt.tensor(*op_list)
 
 # --- N-Spin Hamiltonians ---
 def get_rotation_matrix(theta, phi):
@@ -97,7 +97,8 @@ def get_n_spin_anisotropic_hyperfine(sys: NSpinRPMSystem, A_tensor_D_list, A_ten
                     H_accum += (A_rot[i, j] * GYRO_E) * sys.SA[d1] * sys.IA[k][d2]
                     
     if isinstance(H_accum, int) and H_accum == 0:
-        return qt.tensor([qt.qzero(d) for d in sys.dims])
+        return qt.tensor(*[qt.qzero(d) for d in sys.dims])
+    
     return H_accum
 
 def get_n_spin_zeeman(sys: NSpinRPMSystem, B0, theta=0.0, phi=0.0):
@@ -132,17 +133,19 @@ def get_n_spin_dipolar(sys: NSpinRPMSystem, D_tensor, theta=0.0, phi=0.0):
                 H_accum += (D_rot[i, j] * GYRO_E) * sys.SD[d1] * sys.SA[d2]
                 
     if isinstance(H_accum, int) and H_accum == 0:
-        return qt.tensor([qt.qzero(d) for d in sys.dims])
+        return qt.tensor(*[qt.qzero(d) for d in sys.dims])
     return H_accum
 
 def get_n_spin_exchange(sys: NSpinRPMSystem, J):
     """
     Isotropic Electron-Electron Exchange Coupling.
     """
-    dot = (sys.SD['x'] * sys.SA['x'] + 
-           sys.SD['y'] * sys.SA['y'] + 
-           sys.SD['z'] * sys.SA['z'])
+    dot = (sys.SD['x'] @ sys.SA['x'] + 
+           sys.SD['y'] @ sys.SA['y'] + 
+           sys.SD['z'] @ sys.SA['z'])
            
-    ident = qt.tensor([qt.qeye(d) for d in sys.dims])
+    # Restrict the 0.5 shift to the active 4x4 block
+    P_active_el = qt.qdiags([1, 1, 1, 1, 0, 0, 0, 0], 0)
+    active_ident = sys._tensor_op(P_active_el, 0)
     
-    return -J * (2 * dot + 0.5 * ident)
+    return -J * (2 * dot + 0.5 * active_ident)
