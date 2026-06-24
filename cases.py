@@ -86,7 +86,7 @@ def get_nuclear_case(case_name, **kwargs):
     Returns the spin vectors and coupled hyperfine tensors for a given RPM model.
     """
     # Baseline coupling for toy models (mT)
-    A_BASE = 0.005684
+    A_BASE = 0.05684
     
     if case_name == 'toy_1_nuc':
         loc = kwargs.get('location', 'donor')

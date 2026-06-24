@@ -5,22 +5,27 @@ from core import NSpinRPMSystem
 class NPolarizedSolver:
     def __init__(self, sys: NSpinRPMSystem):
         self.sys = sys
+        dim = self.sys.el_dim
         
         # Electronic States in Product Basis (Top 4x4 block)
         # |0> = |up, up> (Tp)
         # |1> = |up, down>
         # |2> = |down, up>
         # |3> = |down, down> (Tm)
-        self.ket_Tp_act = qt.basis(8, 0)
-        self.ket_Tm_act = qt.basis(8, 3)
-        self.ket_S_act  = (qt.basis(8, 1) - qt.basis(8, 2)).unit()
-        self.ket_T0_act = (qt.basis(8, 1) + qt.basis(8, 2)).unit()
+        self.ket_Tp_act = qt.basis(dim, 0)
+        self.ket_Tm_act = qt.basis(dim, 3)
+        self.ket_S_act  = (qt.basis(dim, 1) - qt.basis(dim, 2)).unit()
+        self.ket_T0_act = (qt.basis(dim, 1) + qt.basis(dim, 2)).unit()
         
         # Shelving States (Indices 4 through 7)
-        self.ket_S_sh  = qt.basis(8, 4)
-        self.ket_Tp_sh = qt.basis(8, 5)
-        self.ket_T0_sh = qt.basis(8, 6)
-        self.ket_Tm_sh = qt.basis(8, 7)
+        self.ket_S_sh  = qt.basis(dim, 4)
+        self.ket_Tp_sh = qt.basis(dim, 5)
+        self.ket_T0_sh = qt.basis(dim, 6)
+        self.ket_Tm_sh = qt.basis(dim, 7)
+
+        # CISS Shelving State (Index 8) if applicable
+        if self.sys.use_ciss:
+            self.ket_R_sh = qt.basis(dim, 8)
         
         # Base Electronic Collapse Operators
         self.C_S_el  = self.ket_S_sh @ self.ket_S_act.dag()
@@ -28,13 +33,24 @@ class NPolarizedSolver:
         self.C_T0_el = self.ket_T0_sh @ self.ket_T0_act.dag()
         self.C_Tm_el = self.ket_Tm_sh @ self.ket_Tm_act.dag()
 
-    def get_collapse_ops(self, ks, kt):
-        return [
+
+    def get_collapse_ops(self, ks, kt, kr=0.0, chi=0.0):
+        c_ops = [
             np.sqrt(ks) * self.sys._tensor_op(self.C_S_el, 0),
             np.sqrt(kt) * self.sys._tensor_op(self.C_Tp_el, 0),
             np.sqrt(kt) * self.sys._tensor_op(self.C_T0_el, 0),
             np.sqrt(kt) * self.sys._tensor_op(self.C_Tm_el, 0)
         ]
+        
+        if self.sys.use_ciss and kr > 0:
+            c = np.cos(chi / 2.0)
+            s = np.sin(chi / 2.0)
+            # Create coherent backscatter state in electronic space
+            ket_back_act = c * self.ket_S_act - s * self.ket_T0_act
+            C_R_el = self.ket_R_sh @ ket_back_act.dag()
+            c_ops.append(np.sqrt(kr) * self.sys._tensor_op(C_R_el, 0))
+            
+        return c_ops
         
     def get_population_ops(self):
         """Constructs full-space projection operators for active populations."""
@@ -50,10 +66,17 @@ class NPolarizedSolver:
             'Tm': self.sys._tensor_op(P_Tm, 0)
         }
 
-    def get_initial_rho(self, P_D_list, P_A_list):
+    def get_initial_rho(self, P_D_list, P_A_list, chi_init=0.0):
         # 1. Pure Singlet Electronic State
-        ket_S_act = (qt.basis(8, 1) - qt.basis(8, 2)).unit()
-        rho_el = ket_S_act @ ket_S_act.dag()
+        if self.sys.use_ciss:
+            c = np.cos(chi_init / 2.0)
+            s = np.sin(chi_init / 2.0)
+            ket_el_act = c * self.ket_S_act + s * self.ket_T0_act
+        else:
+            # Pure Singlet
+            ket_el_act = self.ket_S_act
+            
+        rho_el = ket_el_act @ ket_el_act.dag()
         
         # 2. Polarized Nuclear States Helper
         def make_nuc_rho(spins, p_vecs):

@@ -4,12 +4,13 @@ import scipy.sparse as sp
 from constants import GYRO_E
 
 class NSpinRPMSystem:
-    def __init__(self, d_spins=[0.5], a_spins=[]):
+    def __init__(self, d_spins=[0.5], a_spins=[], use_ciss=False):
         self.d_spins = d_spins
         self.a_spins = a_spins
-        
-        # 8D Electronic Space: 4 Active (Product Basis) + 4 Shelving (S, Tp, T0, Tm)
-        self.el_dim = 8 
+        self.use_ciss = use_ciss
+
+        # 8D Space (Standard) OR 9D Space (CISS Active)
+        self.el_dim = 9 if self.use_ciss else 8 
         self.nuc_dims = [int(2*s + 1) for s in d_spins + a_spins]
         self.dims = [self.el_dim] + self.nuc_dims
         
@@ -21,16 +22,17 @@ class NSpinRPMSystem:
         SD_x_4, SD_y_4, SD_z_4 = qt.tensor(S_x, I2), qt.tensor(S_y, I2), qt.tensor(S_z, I2)
         SA_x_4, SA_y_4, SA_z_4 = qt.tensor(I2, S_x), qt.tensor(I2, S_y), qt.tensor(I2, S_z)
         
-        def pad8(op4):
-            return qt.Qobj(sp.block_diag([op4.full(), np.zeros((4,4))], format="csr"))
-            
-        self.SD = {'x': self._tensor_op(pad8(SD_x_4), 0), 
-                   'y': self._tensor_op(pad8(SD_y_4), 0), 
-                   'z': self._tensor_op(pad8(SD_z_4), 0)}
+        def pad_el(op4):
+            pad_size = self.el_dim - 4
+            return qt.Qobj(sp.block_diag([op4.full(), np.zeros((pad_size, pad_size))], format="csr"))
+
+        self.SD = {'x': self._tensor_op(pad_el(SD_x_4), 0), 
+                   'y': self._tensor_op(pad_el(SD_y_4), 0), 
+                   'z': self._tensor_op(pad_el(SD_z_4), 0)}
                    
-        self.SA = {'x': self._tensor_op(pad8(SA_x_4), 0), 
-                   'y': self._tensor_op(pad8(SA_y_4), 0), 
-                   'z': self._tensor_op(pad8(SA_z_4), 0)}
+        self.SA = {'x': self._tensor_op(pad_el(SA_x_4), 0), 
+                   'y': self._tensor_op(pad_el(SA_y_4), 0), 
+                   'z': self._tensor_op(pad_el(SA_z_4), 0)}
         
         # --- Nuclear Operators ---
         self.ID = []
@@ -54,10 +56,13 @@ class NSpinRPMSystem:
             idx += 1
             
         # Shelving Projectors (Full Space)
-        self.P_shelf_S  = self._tensor_op(qt.fock_dm(8, 4), 0)
-        self.P_shelf_Tp = self._tensor_op(qt.fock_dm(8, 5), 0)
-        self.P_shelf_T0 = self._tensor_op(qt.fock_dm(8, 6), 0)
-        self.P_shelf_Tm = self._tensor_op(qt.fock_dm(8, 7), 0)
+        self.P_shelf_S  = self._tensor_op(qt.fock_dm(self.el_dim, 4), 0)
+        self.P_shelf_Tp = self._tensor_op(qt.fock_dm(self.el_dim, 5), 0)
+        self.P_shelf_T0 = self._tensor_op(qt.fock_dm(self.el_dim, 6), 0)
+        self.P_shelf_Tm = self._tensor_op(qt.fock_dm(self.el_dim, 7), 0)
+
+        if self.use_ciss:
+            self.P_shelf_R = self._tensor_op(qt.fock_dm(self.el_dim, 8), 0)
 
     def _tensor_op(self, op, pos):
         """Places a local operator into the full Hilbert space."""
@@ -145,7 +150,8 @@ def get_n_spin_exchange(sys: NSpinRPMSystem, J):
            sys.SD['z'] @ sys.SA['z'])
            
     # Restrict the 0.5 shift to the active 4x4 block
-    P_active_el = qt.qdiags([1, 1, 1, 1, 0, 0, 0, 0], 0)
+    diag_vals = [1, 1, 1, 1] + [0] * (sys.el_dim - 4)
+    P_active_el = qt.qdiags(diag_vals, 0)
     active_ident = sys._tensor_op(P_active_el, 0)
     
     return -J * (2 * dot + 0.5 * active_ident)
