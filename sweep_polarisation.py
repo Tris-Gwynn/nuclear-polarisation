@@ -1,130 +1,176 @@
+"""
+Singlet yield for two nuclear polarization extremes, run in parallel.
+
+Solves the unpolarized case (P_z = 0) and the fully polarized case (P_z = 1)
+concurrently in two worker processes, then plots both yield traces on a single
+axis. Two tasks means two workers is the most that can help.
+"""
+
+import os
+# QuTiP's sparse integrator is single-threaded, so BLAS threads add nothing.
+# Pinning to 1 also stops the two workers oversubscribing cores during setup.
+os.environ['OMP_NUM_THREADS'] = '1'
+
+import multiprocessing as mp
+
 import numpy as np
 import matplotlib
-matplotlib.use('Agg') # MUST be before importing pyplot
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import qutip as qt
 
-# Drop and rebuild the cached module references if they exist
-import sys
-import importlib
-if 'solver' in sys.modules:
-    importlib.reload(sys.modules['solver'])
-
-from core import (NSpinRPMSystem, 
-                  get_n_spin_anisotropic_hyperfine, 
+from core import (NSpinRPMSystem,
+                  get_n_spin_anisotropic_hyperfine,
                   get_n_spin_zeeman,
                   get_n_spin_dipolar,
                   get_n_spin_exchange)
 from solver import NPolarizedSolver
-from constants import GYRO_E
+from cases import get_nuclear_case
+
 
 # =============================================================================
-# 1. EXPERIMENT CONFIGURATION
+# WORKER PROCESS SETUP
+# =============================================================================
+# The Hamiltonian, operators, time grid and args are identical for both runs.
+# They are loaded once per worker via the initializer rather than shipped with
+# each task. This is correct under both 'fork' and 'spawn' start methods.
+
+def pool_init(H, c_ops, e_ops, times, args):
+    global _H, _c_ops, _e_ops, _times, _args
+    _H = H
+    _c_ops = c_ops
+    _e_ops = e_ops
+    _times = times
+    _args = args
+
+
+def worker_solve(rho0):
+    """Solve for one initial state. Returns the 1D singlet-yield trace only."""
+    result = qt.mesolve(_H, rho0, _times, _c_ops, e_ops=_e_ops, args=_args)
+    return np.real(result.expect[0])
+
+
+# =============================================================================
+# MAIN
 # =============================================================================
 
-# --- A. Radical Pair & Nuclear Spins ---
-# Define spin quantum numbers (e.g., 0.5 for 1H, 1.0 for 14N)
-D_SPINS = [0.5] 
-A_SPINS = [] 
+if __name__ == '__main__':
 
-# Hyperfine Tensors (in MHz)
-# Match Mathematica: Ax = 1.0, Ay = 1.0, Az = 0.5
-A_X = 1.0 / GYRO_E
-A_Y = 1.0 / GYRO_E
-A_Z = 0.5 / GYRO_E
+    # -------------------------------------------------------------------------
+    # Configuration
+    # -------------------------------------------------------------------------
 
-# Construct the anisotropic tensor
-A_TENSOR_TEST = np.diag([A_X, A_Y, A_Z])
+    # Radical pair and nuclear spins
+    ACTIVE_CASE = '4_real_nuc'
+    sys_config = get_nuclear_case(ACTIVE_CASE,
+                                  nucleus_location='donor',
+                                  anisotropy='isotropic')
+    D_SPINS = sys_config['D_SPINS']
+    A_SPINS = sys_config['A_SPINS']
+    A_TENSOR_D_LIST = sys_config['A_TENSOR_D_LIST']
+    A_TENSOR_A_LIST = sys_config['A_TENSOR_A_LIST']
 
-A_TENSOR_D_LIST = [A_TENSOR_TEST] 
-A_TENSOR_A_LIST = []
+    # Electron-electron coupling
+    J_EX = 0.0
+    D_TENSOR = np.zeros((3, 3))
 
-# Electron-Electron Couplings (in MHz)
-J_EX = 0.0                      # Isotropic Exchange
-D_TENSOR = np.zeros((3, 3))     # Dipolar tensor (explicit 3x3 zero matrix)
+    # Static field (magnitude in mT, orientation in rad)
+    B0 = 0.05
+    THETA = 0.0
+    PHI = 0.0
 
+    # Time-dependent RF field. B1_RF_MT = 0 disables it.
+    B1_RF_MT = 0.0
+    RF_FREQ_MHZ = 0.0
+    GYRO_1H_MHZ = 0.04258 * 2 * np.pi
 
-# --- B. External Magnetic Fields ---
-# Static Field (B0)
-B0 = 50.0 / GYRO_E                        # Static field strength (mT)
-THETA = 0.0                     # Molecular orientation angle relative to B0
-PHI = 0.0                       
-print(B0)
-# tNMR RF Driving Field (B1)
-B1_RF_MT = 0.0                 # RF amplitude in mT (Set to 0.0 to disable RF field)
-RF_FREQ_MHZ = 0.0           # 17 kHz converted to MHz
-GYRO_1H_MHZ = 0*0.04258 * 2 * np.pi # Proton gyromagnetic ratio
+    # Recombination rates. Both zero means unitary dynamics.
+    k_S = 1
+    k_T = 0.01
 
+    # Time grid
+    T_MAX = 5
+    TIME_STEPS = 500
+    times = np.linspace(0, T_MAX, TIME_STEPS)
 
-# --- C. Initial State (Nuclear Polarization) ---
-# Defined as vectors [Px, Py, Pz]
-# E.g., Thermal = [0,0,0] | Longitudinal = [0,0,1] | Transverse = [1,0,0]
-P_D_LIST = [[0.0, 0.0, 0.0]]
-P_A_LIST = [] 
+    # The two polarization endpoints to compare
+    P_LOW = 0.0
+    P_HIGH = 1.0
 
+    # Two tasks, so two workers is the ceiling.
+    WORKERS = 2
 
-# --- D. Chemical Kinetics & Time Resolution ---
-k_S = 0.0                       # Singlet recombination rate (1/µs)
-k_T = 0.0                       # Triplet escape rate (1/µs)
-T_MAX = 1000               # µs
+    # -------------------------------------------------------------------------
+    # Static Hamiltonian assembly
+    # -------------------------------------------------------------------------
+    print("Assembling static system Hamiltonians...")
+    sys_rpm = NSpinRPMSystem(d_spins=D_SPINS, a_spins=A_SPINS)
+    solver = NPolarizedSolver(sys_rpm)
 
-times = np.linspace(0, T_MAX, 10000)
+    H_hf = get_n_spin_anisotropic_hyperfine(sys_rpm, A_TENSOR_D_LIST, A_TENSOR_A_LIST,
+                                            theta=0.0, phi=0.0)
+    H_z = get_n_spin_zeeman(sys_rpm, B0, theta=THETA, phi=PHI)
+    H_dip = get_n_spin_dipolar(sys_rpm, D_TENSOR, theta=THETA, phi=PHI)
+    H_ex = get_n_spin_exchange(sys_rpm, J_EX)
 
-# --- 2. SYSTEM SETUP ---
-print("Assembling system Hamiltonians...")
-sys_rpm = NSpinRPMSystem(d_spins=D_SPINS, a_spins=A_SPINS)
-solver = NPolarizedSolver(sys_rpm)
+    H_0 = H_hf + H_z + H_dip + H_ex
+    H_1 = (B1_RF_MT * GYRO_1H_MHZ) * sys_rpm.ID[0]['y']
 
-H_hf = get_n_spin_anisotropic_hyperfine(sys_rpm, A_TENSOR_D_LIST, A_TENSOR_A_LIST, theta=0.0, phi=0.0)
-H_z = get_n_spin_zeeman(sys_rpm, B0, theta=THETA, phi=PHI)
-H_dip = get_n_spin_dipolar(sys_rpm, D_TENSOR, theta=THETA, phi=PHI)
-H_ex = get_n_spin_exchange(sys_rpm, J_EX)
+    H_tot_t = [H_0, [H_1, 'sin(w * t)']] if B1_RF_MT > 0 else H_0
+    args = {'w': RF_FREQ_MHZ * 2 * np.pi}
 
-# Static background Hamiltonian
-H_0 = H_hf + H_z + H_dip + H_ex
+    c_ops = solver.get_collapse_ops(k_S, k_T)
+    pop_ops = solver.get_population_ops()
+    e_ops = [pop_ops['S']]
 
-# Time-dependent spatial operator: RF field acting on donor nucleus 0 along x-axis
-# Note: sys_rpm.ID is an array of dictionaries. We select the first nucleus [0] and its 'x' operator.
-H_1 = (B1_RF_MT * GYRO_1H_MHZ) * sys_rpm.ID[0]['x']
+    # -------------------------------------------------------------------------
+    # Build the two initial states
+    # -------------------------------------------------------------------------
+    def build_rho0(p_val):
+        P_D_LIST = [[0.0, 0.0, p_val] for _ in range(len(D_SPINS))]
+        P_A_LIST = [[0.0, 0.0, p_val] for _ in range(len(A_SPINS))]
+        return solver.get_initial_rho(P_D_LIST, P_A_LIST)
 
-# QuTiP time-dependent format: [H_static, [H_drive, 'time_function']]
-H_tot_t = [H_0, [H_1, 'cos(w * t)']]
+    rho0_list = [build_rho0(P_LOW), build_rho0(P_HIGH)]
 
-# Define the arguments dictionary required by the string coefficient
-args = {'w': RF_FREQ_MHZ * 2 * np.pi}
+    # -------------------------------------------------------------------------
+    # Parallel solve (both runs at once)
+    # -------------------------------------------------------------------------
+    print(f"Solving P_z = {P_LOW} and P_z = {P_HIGH} across {WORKERS} workers...")
+    with mp.Pool(processes=WORKERS,
+                 initializer=pool_init,
+                 initargs=(H_tot_t, c_ops, e_ops, times, args)) as pool:
+        yield_low, yield_high = pool.map(worker_solve, rho0_list)
+    print("Execution complete.")
 
-c_ops = solver.get_collapse_ops(k_S, k_T)
-pop_ops = solver.get_population_ops()
-e_ops = [pop_ops['S'], pop_ops['Tp'], pop_ops['T0'], pop_ops['Tm']]
+    # -------------------------------------------------------------------------
+    # Save raw traces
+    # -------------------------------------------------------------------------
+    np.save(f'singlet_P0_{ACTIVE_CASE}.npy', yield_low)
+    np.save(f'singlet_P1_{ACTIVE_CASE}.npy', yield_high)
+    np.save(f'times_{ACTIVE_CASE}.npy', times)
+    print(f"Traces saved (singlet_P0/P1_{ACTIVE_CASE}.npy, times_{ACTIVE_CASE}.npy)")
 
-# --- 3. RUN TIME EVOLUTION ---
-print("Evaluating master equation...")
-rho0 = solver.get_initial_rho(P_D_LIST, P_A_LIST)
-result = qt.mesolve(H_tot_t, rho0, times, c_ops, e_ops=e_ops, args=args)
+    # -------------------------------------------------------------------------
+    # Plot
+    # -------------------------------------------------------------------------
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.plot(times, yield_high, color='C3', lw=1.5,
+            label=rf'$P_z = {P_HIGH:.0f}$ (fully polarized)')
+    ax.plot(times, yield_low, color='0.2', lw=1.5,
+            label=rf'$P_z = {P_LOW:.0f}$ (unpolarized)')
+    
 
-pop_S  = np.real(result.expect[0])
-pop_Tp = np.real(result.expect[1])
-pop_T0 = np.real(result.expect[2])
-pop_Tm = np.real(result.expect[3])
+    ax.set_xlabel(r'Time ($\mu$s)')
+    ax.set_ylabel('Singlet Yield ($S$)')
+    ax.set_ylim(0.0, 1.0)
+    ax.set_title(f'Singlet Yield: Polarized vs. Unpolarized Nuclei\n'
+                 f'(B0 = {B0} mT | Case: {ACTIVE_CASE})')
+    ax.legend(frameon=False)
+    ax.legend(loc='upper right', fontsize=12)
 
-# --- 4. PLOTTING ---
-fig, ax = plt.subplots(figsize=(8, 10))
-
-ax.plot(times, pop_S,  label=r'Singlet ($S$)', color='#1f77b4', linewidth=2)
-#ax.plot(times, pop_Tp, label=r'Triplet ($T_+$)', color='#d62728', linewidth=2)
-#ax.plot(times, pop_T0, label=r'Triplet ($T_0$)', color='#2ca02c', linewidth=2)
-#ax.plot(times, pop_Tm, label=r'Triplet ($T_-$)', color='#ff7f0e', linewidth=2)
-
-ax.set_xlabel(r'Time ($\mu$s)')
-ax.set_ylabel('Population')
-ax.set_xlim(0, T_MAX)
-ax.set_ylim(-0.02, 1.02)
-ax.legend(loc='upper right')
-ax.grid(True, alpha=0.3)
-
-plt.tight_layout()
-plot_filename = 'state_populations_evolution.png'
-plt.savefig(plot_filename, dpi=300, bbox_inches='tight')
-plt.close()
-
-print(f"Time-resolved population plot successfully saved to {plot_filename}")
+    plt.tight_layout()
+    fname = f'singlet_two_runs_{ACTIVE_CASE}.png'
+    plt.savefig(fname, dpi=200, bbox_inches='tight')
+    plt.close()
+    print(f"Plot saved to {fname}")
