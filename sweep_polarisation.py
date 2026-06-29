@@ -5,6 +5,8 @@ Solves the unpolarized case (P_z = 0) and the fully polarized case (P_z = 1)
 concurrently in two worker processes, then plots both yield traces on a single
 axis. Two tasks means two workers is the most that can help.
 """
+import time
+start_time = time.perf_counter()
 
 import os
 # QuTiP's sparse integrator is single-threaded, so BLAS threads add nothing.
@@ -62,9 +64,7 @@ if __name__ == '__main__':
 
     # Radical pair and nuclear spins
     ACTIVE_CASE = 'toy_2_nuc'  # 'toy_1_nuc', 'toy_2_nuc', '4_real_nuc'
-    sys_config = get_nuclear_case(ACTIVE_CASE,
-                                  nucleus_location='donor',
-                                  anisotropy='isotropic')
+    sys_config = get_nuclear_case(ACTIVE_CASE, location='acceptor')
     D_SPINS = sys_config['D_SPINS']
     A_SPINS = sys_config['A_SPINS']
     A_TENSOR_D_LIST = sys_config['A_TENSOR_D_LIST']
@@ -72,7 +72,7 @@ if __name__ == '__main__':
 
     # Electron-electron coupling
     J_EX = 0.0
-    USE_DIPOLAR = True  # Toggle to switch dipolar coupling on or off
+    USE_DIPOLAR = False  # Toggle to switch dipolar coupling on or off
 
     if USE_DIPOLAR:
         D_TENSOR = np.array([
@@ -84,18 +84,19 @@ if __name__ == '__main__':
         D_TENSOR = np.zeros((3, 3))
     
     # Static field (magnitude in mT, orientation in rad)
-    B0 = 0.05
+    B0 = 0.1
     THETA = 0.0 * np.pi / 180 
     PHI = 0.0 * 2 * np.pi /180
 
     # Time-dependent RF field. B1_RF_MT = 0 disables it.
     B1_RF_MT = 0.0
     RF_FREQ_MHZ = 0.0
-    ax = 'x'  # RF field along ' '-axis
+    ax = 'z'  # RF field along ' '-axis
+    fn = 'sin(w * t)'  # RF field time-dependence: 'sin' or 'cos'
 
     # Recombination rates. Both zero means unitary dynamics.
     k_S = 1.0
-    k_T = 0.01
+    k_T = 1.0
 
     # --- ADDED: CISS Settings ---
     USE_CISS = False          # True = 9D space with backscatter, False = 8D space
@@ -105,7 +106,7 @@ if __name__ == '__main__':
     CHI_RECOMB = CHI_INIT  # Chiral phase angle for recombination   
 
     # Time grid
-    T_MAX = 25
+    T_MAX = 5
     TIME_STEPS = 5000
     times = np.linspace(0, T_MAX, TIME_STEPS)
 
@@ -147,12 +148,13 @@ if __name__ == '__main__':
     else:
         H_1 = 0.0
 
-    H_tot_t = [H_0, [H_1, 'cos(w * t)']] if B1_RF_MT > 0 else H_0
+    H_tot_t = [H_0, [H_1, fn]] if B1_RF_MT > 0 else H_0
     args = {'w': RF_FREQ_MHZ * 2 * np.pi}
 
     c_ops = solver.get_collapse_ops(k_S, k_T, kr=k_R, chi=CHI_RECOMB)
     pop_ops = solver.get_population_ops()
-    e_ops = [pop_ops['S'],pop_ops['Tp'],pop_ops['T0'],pop_ops['Tm']]
+    e_ops = [pop_ops['S'],pop_ops['Tp'],pop_ops['T0'],pop_ops['Tm'],
+             pop_ops['S_sh'],pop_ops['Tp_sh'],pop_ops['T0_sh'],pop_ops['Tm_sh']]
 
     # -------------------------------------------------------------------------
     # Build the two initial states
@@ -168,7 +170,7 @@ if __name__ == '__main__':
         P_A_LIST = [p_vec for _ in range(len(A_SPINS))]
         return solver.get_initial_rho(P_D_LIST, P_A_LIST, chi_init=CHI_INIT)
 
-    axis = 'x'  # Polarization along the z-axis
+    axis = 'z'  # Polarization along the z-axis
     rho0_list = [build_rho0(P_LOW, axis), build_rho0(P_HIGH, axis)]
 
     # -------------------------------------------------------------------------
@@ -182,8 +184,8 @@ if __name__ == '__main__':
     print("Execution complete.")
 
     # Unpack the traces
-    S_low, Tp_low, T0_low, Tm_low = yield_low_all
-    S_high, Tp_high, T0_high, Tm_high = yield_high_all
+    S_low, Tp_low, T0_low, Tm_low, S_sh_low, Tp_sh_low, T0_sh_low, Tm_sh_low = yield_low_all
+    S_high, Tp_high, T0_high, Tm_high, S_sh_high, Tp_sh_high, T0_sh_high, Tm_sh_high = yield_high_all
 
     # -------------------------------------------------------------------------
     # Save raw traces
@@ -194,9 +196,9 @@ if __name__ == '__main__':
     print(f"Traces saved (singlet_P0/P1_{ACTIVE_CASE}.npy, times_{ACTIVE_CASE}.npy)")
 
     # -------------------------------------------------------------------------
-    # Plot
+    # Plot populations
     # -------------------------------------------------------------------------
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(10, 12), sharex=True)
 
     # Colors for specific states
     c_S = 'C3'  # Blue
@@ -212,10 +214,11 @@ if __name__ == '__main__':
     
     ax1.set_ylabel('State Population')
     ax1.set_ylim(-0.1, 1.0)
-    ax1.set_title(rf'State Evolution: Unpolarized ($P_z = {P_LOW:.0f}$)')
+    ax1.set_xlim(0.0, T_MAX)
+    ax1.set_title(rf'State Evolution: Unpolarized ($P_z = {P_LOW:.0f}$) ({ACTIVE_CASE})')
     ax1.legend(loc='upper right', frameon=False, ncol=2)
 
-    # Bottom Panel: Polarized
+    # Middle Panel: Polarized
     ax2.plot(times, S_high, color=c_S, lw=1.5)
     ax2.plot(times, Tp_high, color=c_Tp, lw=1.5)
     ax2.plot(times, T0_high, color=c_T0, lw=1.5)
@@ -224,7 +227,20 @@ if __name__ == '__main__':
     ax2.set_xlabel(r'Time ($\mu$s)')
     ax2.set_ylabel('State Population')
     ax2.set_ylim(-0.1, 1.0)
-    ax2.set_title(rf'State Evolution: Fully Polarized ($P_z = {P_HIGH:.0f}$)')
+    ax2.set_xlim(0.0, T_MAX)
+    ax2.set_title(rf'State Evolution: Fully Polarized ($P_z = {P_HIGH:.0f}$) ({ACTIVE_CASE})')
+
+    # Bottom Panel: Difference
+    ax3.plot(times, S_high-S_low, color=c_S, lw=1.5)
+    ax3.plot(times, Tp_high-Tp_low, color=c_Tp, lw=1.5)
+    ax3.plot(times, T0_high-T0_low, color=c_T0, lw=1.5)
+    ax3.plot(times, Tm_high-Tm_low, color=c_Tm, lw=1.5)
+    
+    ax3.set_xlabel(r'Time ($\mu$s)')
+    ax3.set_ylabel('State Population')
+    #ax3.set_ylim(-0.2, 0.2)
+    ax3.set_xlim(0.0, T_MAX)
+    ax3.set_title(rf'State Evolution: Difference ($P_z = {P_HIGH:.0f} - P_z = {P_LOW:.0f}$) ({ACTIVE_CASE})')
 
     plt.tight_layout()
     fname = f'populations_two_runs_{ACTIVE_CASE}.png'
@@ -232,3 +248,63 @@ if __name__ == '__main__':
     plt.close()
     
     print(f"Plot saved to {fname}")
+
+    # -------------------------------------------------------------------------
+    # Plot yields
+    # -------------------------------------------------------------------------
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(10, 12), sharex=True)
+
+    # Colors for specific states
+    c_S = 'C3'  # Blue
+    c_Tp = 'C2' # Red
+    c_T0 = 'C0' # Green
+    c_Tm = 'C1' # Purple
+
+    # Top Panel: Unpolarized
+    ax1.plot(times, S_sh_low, color=c_S, lw=1.5, label='Singlet ($S$)')
+    ax1.plot(times, Tp_sh_low, color=c_Tp, lw=1.5, label='Triplet ($T_+$)')
+    ax1.plot(times, T0_sh_low, color=c_T0, lw=1.5, label='Triplet ($T_0$)')
+    ax1.plot(times, Tm_sh_low, color=c_Tm, lw=1.5, label='Triplet ($T_-$)')
+    
+    ax1.set_ylabel('State Population')
+    ax1.set_ylim(-0.1, 1.0)
+    ax1.set_xlim(0.0, T_MAX)
+    ax1.set_title(rf'State Evolution: Unpolarized ($P_z = {P_LOW:.0f}$) ({ACTIVE_CASE})')
+    ax1.legend(loc='upper right', frameon=False, ncol=2)
+
+    # Middle Panel: Polarized
+    ax2.plot(times, S_sh_high, color=c_S, lw=1.5)
+    ax2.plot(times, Tp_sh_high, color=c_Tp, lw=1.5)
+    ax2.plot(times, T0_sh_high, color=c_T0, lw=1.5)
+    ax2.plot(times, Tm_sh_high, color=c_Tm, lw=1.5)
+    
+    ax2.set_xlabel(r'Time ($\mu$s)')
+    ax2.set_ylabel('State Population')
+    ax2.set_ylim(-0.1, 1.0)
+    ax2.set_xlim(0.0, T_MAX)
+    ax2.set_title(rf'State Evolution: Fully Polarized ($P_z = {P_HIGH:.0f}$) ({ACTIVE_CASE})')
+
+    # Bottom Panel: Difference
+    ax3.plot(times, S_sh_high-S_sh_low, color=c_S, lw=1.5)
+    ax3.plot(times, Tp_sh_high-Tp_sh_low, color=c_Tp, lw=1.5)
+    ax3.plot(times, T0_sh_high-T0_sh_low, color=c_T0, lw=1.5)
+    ax3.plot(times, Tm_sh_high-Tm_sh_low, color=c_Tm, lw=1.5)
+    
+    ax3.set_xlabel(r'Time ($\mu$s)')
+    ax3.set_ylabel('State Population')
+    #ax3.set_ylim(-0.1, 1.0)
+    ax3.set_xlim(0.0, T_MAX)
+    ax3.set_title(rf'State Evolution: Difference ($P_z = {P_HIGH:.0f} - P_z = {P_LOW:.0f}$) ({ACTIVE_CASE})')
+
+    plt.tight_layout()
+    fname = f'yields_two_runs_{ACTIVE_CASE}.png'
+    plt.savefig(fname, dpi=200, bbox_inches='tight')
+    plt.close()
+    
+    print(f"Plot saved to {fname}")
+
+end_time = time.perf_counter()
+
+# Calculate and print total runtime
+execution_time = end_time - start_time
+print(f"Script finished in {execution_time:.6f} seconds")

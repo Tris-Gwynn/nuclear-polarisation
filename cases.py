@@ -84,38 +84,36 @@ R_TRP_TO_FAD = np.array([
 def get_nuclear_case(case_name, **kwargs):
     """
     Returns the spin vectors and coupled hyperfine tensors for a given RPM model.
-    """
-    # Baseline coupling for toy models (mT)
-    A_BASE = 0.05684
-    
+    """    
     if case_name == 'toy_1_nuc':
-        loc = kwargs.get('location', 'donor')
-        anisotropy = kwargs.get('anisotropy', 'anisotropic')
+        loc = kwargs.get('location')
         
-        if anisotropy == 'isotropic':
-            base_tensor = np.diag([A_BASE, A_BASE, A_BASE])
-        else:
-            base_tensor = np.diag([A_BASE/10.0, A_BASE/10.0, A_BASE])
-            
         if loc == 'donor':
-            return {'D_SPINS': [0.5], 'A_SPINS': [], 'A_TENSOR_D_LIST': [base_tensor], 'A_TENSOR_A_LIST': []}
+            return {
+                'D_SPINS': [1.0], # 14N
+                'A_SPINS': [], 
+                'A_TENSOR_D_LIST': [TENSORS['FAD']['N5']], 
+                'A_TENSOR_A_LIST': []
+            }
         else:
-            return {'D_SPINS': [], 'A_SPINS': [0.5], 'A_TENSOR_D_LIST': [], 'A_TENSOR_A_LIST': [base_tensor]}
-
+            raw_acceptor = TENSORS['TrpH']['H1']
+            rot_acceptor = R_TRP_TO_FAD @ raw_acceptor @ R_TRP_TO_FAD.T
+            return {
+                'D_SPINS': [], 
+                'A_SPINS': [0.5], # 1H
+                'A_TENSOR_D_LIST': [], 
+                'A_TENSOR_A_LIST': [rot_acceptor]
+            }
     elif case_name == 'toy_2_nuc':
-        anisotropy = kwargs.get('anisotropy', 'anisotropic')
+        # 1 Donor (FAD N5) and 1 Acceptor (TrpH H1)
+        raw_acceptor = TENSORS['TrpH']['H1']
+        rot_acceptor = R_TRP_TO_FAD @ raw_acceptor @ R_TRP_TO_FAD.T
         
-        if anisotropy == 'isotropic':
-            base_tensor = np.diag([A_BASE, A_BASE, A_BASE])
-        else:
-            base_tensor = np.diag([A_BASE/10.0, A_BASE/10.0, A_BASE])
-            
-        # Opposed tensors to break spatial symmetry
         return {
-            'D_SPINS': [0.5], 
-            'A_SPINS': [0.5], 
-            'A_TENSOR_D_LIST': [base_tensor], 
-            'A_TENSOR_A_LIST': [-base_tensor]
+            'D_SPINS': [1.0], # 14N
+            'A_SPINS': [0.5], # 1H
+            'A_TENSOR_D_LIST': [TENSORS['FAD']['N5']], 
+            'A_TENSOR_A_LIST': [rot_acceptor]
         }
 
     elif case_name == '4_real_nuc':

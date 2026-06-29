@@ -59,11 +59,20 @@ class NPolarizedSolver:
         P_T0 = self.ket_T0_act @ self.ket_T0_act.dag()
         P_Tm = self.ket_Tm_act @ self.ket_Tm_act.dag()
 
+        P_S_sh  = self.ket_S_sh @ self.ket_S_sh.dag()
+        P_Tp_sh = self.ket_Tp_sh @ self.ket_Tp_sh.dag()
+        P_T0_sh = self.ket_T0_sh @ self.ket_T0_sh.dag()
+        P_Tm_sh = self.ket_Tm_sh @ self.ket_Tm_sh.dag()
+
         return {
             'S': self.sys._tensor_op(P_S, 0),
             'Tp': self.sys._tensor_op(P_Tp, 0),
             'T0': self.sys._tensor_op(P_T0, 0),
-            'Tm': self.sys._tensor_op(P_Tm, 0)
+            'Tm': self.sys._tensor_op(P_Tm, 0),
+            'S_sh': self.sys._tensor_op(P_S_sh, 0),
+            'Tp_sh': self.sys._tensor_op(P_Tp_sh, 0),
+            'T0_sh': self.sys._tensor_op(P_T0_sh, 0),
+            'Tm_sh': self.sys._tensor_op(P_Tm_sh, 0)
         }
 
     def get_initial_rho(self, P_D_list, P_A_list, chi_init=0.0):
