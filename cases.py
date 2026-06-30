@@ -1,4 +1,27 @@
 import numpy as np
+# =============================================================================
+# SIMPLE CUSTOM TENSORS (Values in mT)
+# =============================================================================
+
+def iso(A):
+    """Isotropic coupling. Conserves J along any field axis."""
+    return np.eye(3) * float(A)
+
+def axial(A_perp, A_par):
+    """Axial coupling, unique axis = z. Conserves Jz only when field is on z."""
+    return np.diag([float(A_perp), float(A_perp), float(A_par)]).astype(float)
+
+def rhombic(Ax, Ay, Az):
+    """Purely diagonal rhombic. Note: does NOT break Jz for field on z.
+    Use a tensor with off-diagonal elements to break axial symmetry."""
+    return np.diag([float(Ax), float(Ay), float(Az)]).astype(float)
+
+def off_diagonal(A, delta):
+    """Isotropic base A with off-diagonal xy element delta.
+    Breaks axial symmetry: use to demonstrate Q1 off-diagonal effect."""
+    return np.array([[A, delta, 0.0],
+                     [delta, A, 0.0],
+                     [0.0,   0.0, A]], float)
 
 # =============================================================================
 # HYPERFINE TENSOR LIBRARY (Values in mT)

@@ -14,11 +14,11 @@ from RPM_Experiment_Builder import RPMBuilder
 # -------------------------------------------------------------------------
 # Configuration
 # -------------------------------------------------------------------------
-ACTIVE_CASE = 'toy_2_nuc'
+ACTIVE_CASE = 'toy_1_nuc'
 USE_DIPOLAR = False
 J_EX = 0.0
-THETA = 0.0
-PHI = 0.0
+THETA = np.pi/2
+PHI = np.pi/2
 
 T_MAX = 5.0
 P_LOW = 0.0
@@ -40,16 +40,18 @@ def compute_mary_point(B0):
     yields_low = builder.simulate_yield(B0=B0, t_max=T_MAX, p_val=P_LOW, pol_axis=pol_axis, theta=THETA, phi=PHI)
     
     # Polarized run
-    yields_high = builder.simulate_yield(B0=B0, t_max=T_MAX, p_val=P_HIGH, pol_axis=pol_axis, theta=THETA, phi=PHI)
+    yields_x = builder.simulate_yield(B0=B0, t_max=T_MAX, p_val=P_HIGH, pol_axis='x', theta=THETA, phi=PHI)
+    yields_y = builder.simulate_yield(B0=B0, t_max=T_MAX, p_val=P_HIGH, pol_axis='y', theta=THETA, phi=PHI)
+    yields_z = builder.simulate_yield(B0=B0, t_max=T_MAX, p_val=P_HIGH, pol_axis='z', theta=THETA, phi=PHI)
 
-    return B0, yields_low[0], yields_high[0]  # Index 0 corresponds to S_sh (Singlet Yield)
+    return B0, yields_low[0], yields_x[0], yields_y[0], yields_z[0]  # Index 0 corresponds to S_sh (Singlet Yield)
 
 if __name__ == '__main__':
     start_time = time.perf_counter()
     print(f"Sweeping {B0_POINTS} magnetic field points...")
 
     # Execute CPU parallel sweep
-    cores = mp.cpu_count()
+    cores = 25
     with mp.Pool(processes=cores) as pool:
         results = pool.map(compute_mary_point, B0_ARRAY)
 
@@ -57,8 +59,9 @@ if __name__ == '__main__':
     results = np.array(results)
     B0_vals = results[:, 0]
     Yields_low = results[:, 1]
-    Yields_high = results[:, 2]
-    Contrast = Yields_high - Yields_low
+    Yields_x = results[:, 2]
+    Yields_y = results[:, 3]
+    Yields_z = results[:, 4]
 
     # -------------------------------------------------------------------------
     # Plotting Dual-Axis MARY Curve
@@ -67,10 +70,15 @@ if __name__ == '__main__':
 
     # Primary Axis: Singlet Yields
     color_low = 'C3' # Red
-    color_high = 'C0' # Blue
-    ax1.plot(B0_vals, Yields_low, color=color_low, lw=2, label=rf'Unpolarized ($P_z={P_LOW:.0f}$)')
-    ax1.plot(B0_vals, Yields_high, color=color_high, lw=2, label=rf'Fully Polarized ($P_z={P_HIGH:.0f}$)')
-    
+    color_x = 'C0' # Blue
+    color_y = 'C1' # Orange
+    color_z = 'C2' # Green
+
+    ax1.plot(B0_vals, Yields_low, color=color_low, lw=2, label=rf'Unpolarized ($P={P_LOW:.0f}$)')
+    ax1.plot(B0_vals, Yields_x, color=color_x, lw=2, label=rf'Fully Polarized ($P_x={P_HIGH:.0f}$)')
+    ax1.plot(B0_vals, Yields_y, color=color_y, lw=2, label=rf'Fully Polarized ($P_y={P_HIGH:.0f}$)')
+    ax1.plot(B0_vals, Yields_z, color=color_z, lw=2, label=rf'Fully Polarized ($P_z={P_HIGH:.0f}$)')
+
     ax1.set_xscale('log')
     ax1.set_xlabel(r'Static Magnetic Field $B_0$ (mT)')
     ax1.set_xlim(B0_MIN, B0_MAX)
@@ -78,15 +86,7 @@ if __name__ == '__main__':
     ax1.tick_params(axis='y')
     ax1.legend(loc='center left', frameon=False)
 
-    # Secondary Axis: Polarization Contrast
-    ax2 = ax1.twinx()
-    color_contrast = 'k' # Black
-    ax2.plot(B0_vals, Contrast, color=color_contrast, lw=2, linestyle='--', label=r'Contrast ($\Delta \Phi_S$)')
-    ax2.set_ylabel(r'Polarization Contrast ($\Delta \Phi_S$)', color=color_contrast)
-    ax2.tick_params(axis='y', labelcolor=color_contrast)
-    ax2.axhline(0, color='gray', linestyle=':', lw=1)
-    ax2.legend(loc='center right', frameon=False)
-
+    
     plt.title('Magnetically Altered Reaction Yield (MARY)')
     plt.tight_layout()
     
