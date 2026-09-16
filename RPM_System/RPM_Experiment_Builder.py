@@ -1,9 +1,3 @@
-"""
-RPMBuilder: pure physics engine for radical pair mechanism simulations.
-
-Accepts all parameters explicitly. No internal case loading.
-Import cases.py separately to access stored hyperfine tensors.
-"""
 import numpy as np
 import qutip as qt
 from core import (NSpinRPMSystem, get_n_spin_anisotropic_hyperfine,
@@ -50,14 +44,15 @@ class RPMBuilder:
     # ------------------------------------------------------------------
     # Hamiltonian
     # ------------------------------------------------------------------
-    def _build_hamiltonian(self, B0, theta=0.0, phi=0.0):
-        H_hf  = get_n_spin_anisotropic_hyperfine(self.sys_rpm, self.a_tensor_d,
-                                                  self.a_tensor_a, theta=theta, phi=phi)
+    def _build_hamiltonian(self, B0, theta=0.0, phi=0.0, theta_hf=0.0, phi_hf=0.0, theta_d=0.0, phi_d=0.0):
+        H_hf = get_n_spin_anisotropic_hyperfine(self.sys_rpm, self.a_tensor_d, self.a_tensor_a, 
+                                                theta=theta_hf, phi=phi_hf)
         H_z   = get_n_spin_zeeman(self.sys_rpm, B0, theta=theta, phi=phi)
-        H_dip = get_n_spin_dipolar(self.sys_rpm, self.d_tensor, theta=theta, phi=phi)
+        H_dip = get_n_spin_dipolar(self.sys_rpm, self.d_tensor, theta=theta_d, phi=phi_d)
         H_ex  = get_n_spin_exchange(self.sys_rpm, self.j_ex)
         return H_hf + H_z + H_dip + H_ex
-
+               
+        
     # ------------------------------------------------------------------
     # Initial states
     # ------------------------------------------------------------------
@@ -82,28 +77,21 @@ class RPMBuilder:
     # ------------------------------------------------------------------
     def dynamics(self, B0, times, p_val=0.0, pol_axis='z',
                  theta=0.0, phi=0.0, rho0=None):
-        """
-        Time traces for all populations.
-        Returns tuple: (S, Tp, T0, Tm, S_sh, Tp_sh, T0_sh, Tm_sh)
-        """
         H    = self._build_hamiltonian(B0, theta, phi)
         rho0 = rho0 if rho0 is not None else self.initial_state(p_val, pol_axis)
         keys = ('S', 'Tp', 'T0', 'Tm', 'S_sh', 'Tp_sh', 'T0_sh', 'Tm_sh')
         e_ops = [self.pop_ops[k] for k in keys]
         res  = qt.mesolve(H, rho0, times, self.c_ops, e_ops=e_ops,
-                          options={'nsteps': 100000})
+                          options={'method': 'bdf','nsteps': 1000000})
         return tuple(np.real(ex) for ex in res.expect)
 
-    def yield_(self, B0, t_max=5.0, p_val=0.0, pol_axis='z',
+    def yield_(self, B0, p_val=0.0, pol_axis='z',
                theta=0.0, phi=0.0, rho0=None):
-        """
-        Asymptotic shelved yields (S, Tp, T0, Tm) at t_max.
-        Only meaningful for open systems (k_s or k_t > 0).
-        """
+        t_max = 5 / min(self.k_s, self.k_t)
         H    = self._build_hamiltonian(B0, theta, phi)
         rho0 = rho0 if rho0 is not None else self.initial_state(p_val, pol_axis)
         keys = ('S_sh', 'Tp_sh', 'T0_sh', 'Tm_sh')
         e_ops = [self.pop_ops[k] for k in keys]
         res  = qt.mesolve(H, rho0, [0, t_max], self.c_ops, e_ops=e_ops,
-                          options={'nsteps': 100000})
+                          options={'method': 'bdf','nsteps': 1000000})
         return tuple(float(np.real(ex[-1])) for ex in res.expect) #type: ignore

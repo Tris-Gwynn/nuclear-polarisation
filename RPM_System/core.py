@@ -72,8 +72,8 @@ class NSpinRPMSystem:
 
 # --- N-Spin Hamiltonians ---
 def get_rotation_matrix(theta, phi):
-    r_y = np.array([[np.cos(phi), 0, np.sin(phi)], [0, 1, 0], [-np.sin(phi), 0, np.cos(phi)]])
-    r_z = np.array([[np.cos(theta), -np.sin(theta), 0], [np.sin(theta), np.cos(theta), 0], [0, 0, 1]])
+    r_y = np.array([[np.cos(theta), 0, np.sin(theta)], [0, 1, 0], [-np.sin(theta), 0, np.cos(theta)]])
+    r_z = np.array([[np.cos(phi), -np.sin(phi), 0], [np.sin(phi), np.cos(phi), 0], [0, 0, 1]])
     return r_z @ r_y
 
 def get_n_spin_anisotropic_hyperfine(sys: NSpinRPMSystem, A_tensor_D_list, A_tensor_A_list, theta=0.0, phi=0.0):
@@ -154,4 +154,4 @@ def get_n_spin_exchange(sys: NSpinRPMSystem, J):
     P_active_el = qt.qdiags(diag_vals, 0)
     active_ident = sys._tensor_op(P_active_el, 0)
     
-    return -J * (2 * dot + 0.5 * active_ident)
+    return -J * GYRO_E * (2 * dot + 0.5 * active_ident)
