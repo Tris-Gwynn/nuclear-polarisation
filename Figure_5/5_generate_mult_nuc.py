@@ -64,7 +64,7 @@ OUTPUT_FILE = "Figure_5/figure5_two_nucleus_scan.npz"
 
 LAMBDA_VALUES = [0.00, 0.25, 0.50, 0.75, 1.00]   # A2 = lambda * A1
 
-N_WORKERS = 25   # one curve per worker: 5 lambdas x 5 preparations
+N_WORKERS = 28   # match available cores; 25 tasks total so this caps naturally
 
 # ----------------------------------------------------------------------
 CASES = {
@@ -84,28 +84,31 @@ PREPARATIONS = {
 }
 
 # ----------------------------------------------------------------------
-_worker_builder = None
+_worker_builders = None   # dict: case_key -> RPMBuilder, built once per worker
 
 
-def _init_worker(case_key):
-    global _worker_builder
-    case = CASES[case_key]
-    _worker_builder = RPMBuilder(
-        d_spins=[0.5, 0.5], a_spins=[],
-        a_tensor_d=case["a_tensor_d"], a_tensor_a=[],
-        d_tensor=D_TENSOR, j_ex=J_EX,
-        k_s=K_S, k_t=K_T, k_r=K_R,
-        use_ciss=USE_CISS, chi_percent=CHI_PERCENT
-    )
+def _init_worker():
+    global _worker_builders
+    _worker_builders = {
+        case_key: RPMBuilder(
+            d_spins=[0.5, 0.5], a_spins=[],
+            a_tensor_d=case["a_tensor_d"], a_tensor_a=[],
+            d_tensor=D_TENSOR, j_ex=J_EX,
+            k_s=K_S, k_t=K_T, k_r=K_R,
+            use_ciss=USE_CISS, chi_percent=CHI_PERCENT
+        )
+        for case_key, case in CASES.items()
+    }
 
 
 def _compute_curve(task):
     """Shared p_val/pol_axis applied to BOTH nuclei via initial_state
     (same convention as the original two_on_donor case)."""
     case_key, prep_label, p_val, pol_axis, B0_values = task
+    builder = _worker_builders[case_key]
     curve = np.zeros(len(B0_values))
     for i, B0 in enumerate(B0_values):
-        S_sh, Tp_sh, T0_sh, Tm_sh = _worker_builder.yield_(
+        S_sh, Tp_sh, T0_sh, Tm_sh = builder.yield_(
             B0, p_val=p_val, pol_axis=pol_axis, theta=THETA_FIELD, phi=PHI_FIELD
         )
         curve[i] = S_sh
@@ -115,24 +118,19 @@ def _compute_curve(task):
 if __name__ == "__main__":
     B0_values = np.linspace(B0_MIN, B0_MAX, N_B0)
 
-    results = {}
+    tasks = [
+        (case_key, prep_label, p_val, pol_axis, B0_values)
+        for case_key in CASES
+        for prep_label, (p_val, pol_axis) in PREPARATIONS.items()
+    ]
 
-    for case_key in CASES:
-        tasks = [
-            (case_key, prep_label, p_val, pol_axis, B0_values)
-            for prep_label, (p_val, pol_axis) in PREPARATIONS.items()
-        ]
-        with ProcessPoolExecutor(
-            max_workers=min(N_WORKERS, len(tasks)),
-            initializer=_init_worker,
-            initargs=(case_key,),
-        ) as executor:
-            for _, prep_label, curve in tqdm(
-                executor.map(_compute_curve, tasks),
-                total=len(tasks),
-                desc=case_key,
-            ):
-                results[f"{case_key}_{prep_label}"] = curve
+    results = {}
+    with ProcessPoolExecutor(max_workers=N_WORKERS, initializer=_init_worker) as executor:
+        for case_key, prep_label, curve in tqdm(
+            executor.map(_compute_curve, tasks),
+            total=len(tasks),
+        ):
+            results[f"{case_key}_{prep_label}"] = curve
 
     np.savez(OUTPUT_FILE, B0_values=B0_values, **results)
     print(f"Saved to {OUTPUT_FILE}")
