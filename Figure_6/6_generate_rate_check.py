@@ -1,27 +1,24 @@
 """
-run_rate_robustness.py
+run_figure6_offaxis_rates.py
 
-Robustness check: does the resonance-switching behaviour (Pz = +1, 0, -1)
-survive when k_S != k_T, rather than the k_S = k_T = 1.0 used
-throughout Figures 1-5?
+Replaces run_rate_robustness.py's B-parallel-z test. Same question --
+does the polarisation-dependent response survive k_S != k_T -- but at
+the off-axis field where the transverse (Px, Py) response actually
+exists, and reporting c_x, c_y, c_z rather than just Pz = +1, 0, -1.
 
-Case A: baseline,      k_S=1.0, k_T=1.0
-Case B: slow_triplet,  k_S=1.0, k_T=whatever RATE_KT below is set to
+Case baseline:      k_S=1.0, k_T=1.0
+Case half_triplet:  k_S=1.0, k_T=0.5   (intermediate point, to check
+                     the transition between the two extremes is
+                     gradual rather than a jump)
+Case slow_triplet:  k_S=1.0, k_T=0.1
 
-Everything else unchanged from Figure 3's one-nucleus setup: same
-tensor, B parallel z, same B0 sweep. H is identical in both cases --
-only the reaction rates entering the collapse operators change.
+Everything else unchanged from Figure 4's one-nucleus setup: same
+tensor, same off-axis field, same B0 sweep. H is identical across
+cases; only the reaction rates entering the collapse operators change.
 
-Parallelised at the individual (case, preparation, B0-point) level
-rather than one task per curve: with only 6 curves total, curve-level
-parallelism caps at 6 workers regardless of how many cores are
-available. Flattening to points gives 2 x 3 x N_B0 independent tasks,
-which spreads properly across many more cores.
-
-Each worker builds BOTH case builders once at startup (cheap relative
-to a single yield_ call), since a persistent worker pool serving mixed
-tasks from both cases cannot commit to only one case's builder as it
-could when parallelising by curve.
+Parallelised at the (case, preparation, B0-point) level, as in the
+original rate check: 3 cases x 4 preparations = 12 curves is still few
+enough that curve-level parallelism would under-use available cores.
 """
 import sys
 sys.path.insert(0, "/home/tristengwynn/nuclear-polarisation/RPM_System")
@@ -48,32 +45,33 @@ K_R = 0.0
 USE_CISS = False
 CHI_PERCENT = 0.0
 
-THETA_FIELD, PHI_FIELD = 0.0, 0.0   # B parallel z
+THETA_FIELD, PHI_FIELD = np.pi / 4, np.pi / 4   # off-axis, matches Figure 4
 
 # ----------------------------------------------------------------------
 # B0 sweep
 # ----------------------------------------------------------------------
 B0_MIN = 0.0
 B0_MAX = 1.0
-N_B0 = 500   # PLACEHOLDER: reduce further (e.g. 200) if RATE_KT is small
-             # enough that per-point cost is still high even parallelised
+N_B0 = 500   # PLACEHOLDER: reduce further if slow_triplet's per-point
+             # cost is still high even parallelised
 
-OUTPUT_FILE = "Figure_6/rate_robustness_data.npz"
+OUTPUT_FILE = "Figure_6/figure6_offaxis_rates.npz"
 
 N_WORKERS = 28
-CHUNKSIZE = 4   # tune down if progress reporting feels too coarse,
-                 # up if IPC overhead dominates at this task count
+CHUNKSIZE = 4
 
 # ----------------------------------------------------------------------
 CASES = {
     "baseline":     {"k_s": 1.0, "k_t": 1.0},
+    "half_triplet": {"k_s": 1.0, "k_t": 0.5},
     "slow_triplet": {"k_s": 1.0, "k_t": 0.1},
 }
 
 PREPARATIONS = {
-    "Pz_plus":  +1.0,
-    "P0":        0.0,
-    "Pz_minus": -1.0,
+    "P0": [0.0, 0.0, 0.0],
+    "Px": [1.0, 0.0, 0.0],
+    "Py": [0.0, 1.0, 0.0],
+    "Pz": [0.0, 0.0, 1.0],
 }
 
 # ----------------------------------------------------------------------
@@ -95,10 +93,11 @@ def _init_worker():
 
 
 def _compute_point(task):
-    case_key, prep_label, p_val, i, B0 = task
+    case_key, prep_label, p_vec, i, B0 = task
     builder = _worker_builders[case_key]
+    rho0 = builder.initial_state_custom(p_d=[p_vec], p_a=[])
     S_sh, Tp_sh, T0_sh, Tm_sh = builder.yield_(
-        B0, p_val=p_val, pol_axis='z', theta=THETA_FIELD, phi=PHI_FIELD
+        B0, theta=THETA_FIELD, phi=PHI_FIELD, rho0=rho0
     )
     return case_key, prep_label, i, S_sh
 
@@ -107,9 +106,9 @@ if __name__ == "__main__":
     B0_values = np.linspace(B0_MIN, B0_MAX, N_B0)
 
     tasks = [
-        (case_key, prep_label, p_val, i, B0)
+        (case_key, prep_label, p_vec, i, B0)
         for case_key in CASES
-        for prep_label, p_val in PREPARATIONS.items()
+        for prep_label, p_vec in PREPARATIONS.items()
         for i, B0 in enumerate(B0_values)
     ]
 
@@ -128,13 +127,13 @@ if __name__ == "__main__":
     np.savez(OUTPUT_FILE, B0_values=B0_values, **results)
     print(f"Saved to {OUTPUT_FILE}")
 
-    # Diagnostic: midpoint identity should hold exactly (near machine
-    # precision) in BOTH cases -- it depends only on the single nucleus
-    # being spin-1/2, not on k_S vs k_T. A failure here would indicate
-    # a bug, not a kinetics effect.
+    # Diagnostic: max|c_alpha| per case, to see whether the transverse
+    # response weakens gradually (half_triplet between baseline and
+    # slow_triplet) or jumps.
     for case_key in CASES:
         p0 = results[f"{case_key}_P0"]
-        pz_plus = results[f"{case_key}_Pz_plus"]
-        pz_minus = results[f"{case_key}_Pz_minus"]
-        dev = np.abs(p0 - 0.5 * (pz_plus + pz_minus)).max()
-        print(f"{case_key}: max midpoint deviation = {dev:.3e}")
+        cx = results[f"{case_key}_Px"] - p0
+        cy = results[f"{case_key}_Py"] - p0
+        cz = results[f"{case_key}_Pz"] - p0
+        print(f"{case_key}: max|c_x|={np.abs(cx).max():.4e}, "
+              f"max|c_y|={np.abs(cy).max():.4e}, max|c_z|={np.abs(cz).max():.4e}")

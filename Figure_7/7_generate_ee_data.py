@@ -1,25 +1,21 @@
 """
-run_jd_robustness.py
+run_figure7_offaxis_jd.py
 
-Final robustness figure: does the Pz-dependent resonance switching
-survive when electron-electron exchange (J) and/or dipolar (D)
-coupling are added to the one-nucleus baseline? This is NOT a J/D
-parameter sweep -- one representative nonzero value of each, held
-fixed, combined in four panels:
+Replaces run_jd_robustness.py's B-parallel-z, Pz-only test. Same four
+panels, same J_VALUE/D0_VALUE placeholders, but at the off-axis field
+where the transverse response exists, reporting c_x, c_y, c_z rather
+than just Pz = +1, 0, -1:
 
     (a) H_Z + H_hf                  (baseline, J=0, D=0)
     (b) H_Z + H_hf + H_ex            (J != 0, D=0)
     (c) H_Z + H_hf + H_dip           (J=0, D != 0)
     (d) H_Z + H_hf + H_ex + H_dip    (J != 0, D != 0)
 
-Same tensor, same B0 sweep, same k_S=k_T=1.0 as the original Figures
-1-4. Only the coherent Hamiltonian terms change between panels.
+J and D0 are PLACEHOLDERS (0.1 mT each), copied from the original
+z-aligned test for continuity -- replace with whatever values are
+already established/justified elsewhere in the thesis if those exist.
 
-J and D0 are PLACEHOLDERS (0.1 mT each) -- replace with whatever
-values are already established/justified elsewhere in the thesis if
-those exist, rather than treating 0.1 mT as a considered choice.
-
-One task per (panel, preparation) curve: 12 tasks total.
+One task per (panel, preparation) curve: 16 tasks total.
 """
 import sys
 sys.path.insert(0, "/home/tristengwynn/nuclear-polarisation/RPM_System")
@@ -46,7 +42,7 @@ K_R = 0.0
 USE_CISS = False
 CHI_PERCENT = 0.0
 
-THETA_FIELD, PHI_FIELD = 0.0, 0.0   # B parallel z
+THETA_FIELD, PHI_FIELD = np.pi / 4, np.pi / 4   # off-axis, matches Figure 4
 
 # PLACEHOLDER: replace with established values if available, rather
 # than treating 0.1 mT as a considered choice for either parameter.
@@ -61,9 +57,9 @@ B0_MIN = 0.0
 B0_MAX = 1.0
 N_B0 = 5000
 
-OUTPUT_FILE = "Figure_7/jd_robustness_data.npz"
+OUTPUT_FILE = "Figure_7/figure7_offaxis_jd_data.npz"
 
-N_WORKERS = 12   # one curve per worker: 4 panels x 3 preparations
+N_WORKERS = 16   # one curve per worker: 4 panels x 4 preparations
 
 # ----------------------------------------------------------------------
 PANELS = {
@@ -74,9 +70,10 @@ PANELS = {
 }
 
 PREPARATIONS = {
-    "Pz_plus":  +1.0,
-    "P0":        0.0,
-    "Pz_minus": -1.0,
+    "P0": [0.0, 0.0, 0.0],
+    "Px": [1.0, 0.0, 0.0],
+    "Py": [0.0, 1.0, 0.0],
+    "Pz": [0.0, 0.0, 1.0],
 }
 
 # ----------------------------------------------------------------------
@@ -96,11 +93,12 @@ def _init_worker(panel_key):
 
 
 def _compute_curve(task):
-    panel_key, prep_label, p_val, B0_values = task
+    panel_key, prep_label, p_vec, B0_values = task
     curve = np.zeros(len(B0_values))
     for i, B0 in enumerate(B0_values):
+        rho0 = _worker_builder.initial_state_custom(p_d=[p_vec], p_a=[])
         S_sh, Tp_sh, T0_sh, Tm_sh = _worker_builder.yield_(
-            B0, p_val=p_val, pol_axis='z', theta=THETA_FIELD, phi=PHI_FIELD
+            B0, theta=THETA_FIELD, phi=PHI_FIELD, rho0=rho0
         )
         curve[i] = S_sh
     return panel_key, prep_label, curve
@@ -113,8 +111,8 @@ if __name__ == "__main__":
 
     for panel_key in PANELS:
         tasks = [
-            (panel_key, prep_label, p_val, B0_values)
-            for prep_label, p_val in PREPARATIONS.items()
+            (panel_key, prep_label, p_vec, B0_values)
+            for prep_label, p_vec in PREPARATIONS.items()
         ]
         with ProcessPoolExecutor(
             max_workers=min(N_WORKERS, len(tasks)),
@@ -131,19 +129,14 @@ if __name__ == "__main__":
     np.savez(OUTPUT_FILE, B0_values=B0_values, **results)
     print(f"Saved to {OUTPUT_FILE}")
 
-    # Diagnostics:
-    # 1. Midpoint identity should hold exactly in every panel -- it
-    #    depends only on the single nucleus being spin-1/2, not on
-    #    which coherent terms are present.
-    # 2. Scalar summary: max_B0 |Phi_S(+1) - Phi_S(-1)| per panel, to
-    #    quantify whether the polarisation dependence strengthens or
-    #    weakens as J/D are added.
+    # Diagnostic: max|c_alpha| per panel, to quantify whether J/D
+    # suppress, enhance, or leave untouched each transverse component
+    # individually -- something the old Pz-only test couldn't show.
     print()
     for panel_key in PANELS:
         p0 = results[f"{panel_key}_P0"]
-        pz_plus = results[f"{panel_key}_Pz_plus"]
-        pz_minus = results[f"{panel_key}_Pz_minus"]
-        midpoint_dev = np.abs(p0 - 0.5 * (pz_plus + pz_minus)).max()
-        max_pol_diff = np.abs(pz_plus - pz_minus).max()
-        print(f"{panel_key}: max midpoint deviation = {midpoint_dev:.3e}, "
-              f"max|Phi_S(+1)-Phi_S(-1)| = {max_pol_diff:.4f}")
+        cx = results[f"{panel_key}_Px"] - p0
+        cy = results[f"{panel_key}_Py"] - p0
+        cz = results[f"{panel_key}_Pz"] - p0
+        print(f"{panel_key}: max|c_x|={np.abs(cx).max():.4e}, "
+              f"max|c_y|={np.abs(cy).max():.4e}, max|c_z|={np.abs(cz).max():.4e}")

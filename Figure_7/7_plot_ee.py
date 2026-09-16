@@ -1,45 +1,44 @@
 """
-plot_jd_robustness.py
+plot_figure7_offaxis_jd.py
 
-2x2 figure: (a) baseline, (b) +exchange, (c) +dipolar, (d) +both.
-Each shows Phi_S(B0) for Pz = +1, 0, -1, one nucleus, B parallel z.
+Grouped bar chart: max|c_x|, max|c_y|, max|c_z| per panel (baseline,
+exchange, dipolar, both), showing whether J/D suppress, enhance, or
+leave untouched each transverse component individually.
 """
 import numpy as np
 import matplotlib.pyplot as plt
 
-INPUT_FILE = "Figure_7/jd_robustness_data.npz"   # PLACEHOLDER: path if different
+INPUT_FILE = "Figure_7/figure7_offaxis_jd_data.npz"   # PLACEHOLDER: path if different
 
 data = np.load(INPUT_FILE)
-B0_values = data["B0_values"]
 
 PANELS = ["a_baseline", "b_exchange", "c_dipolar", "d_both"]
-PANEL_TITLES = {
-    "a_baseline": r"(a) $H_Z+H_{\rm hf}$",
-    "b_exchange": r"(b) $H_Z+H_{\rm hf}+H_{\rm ex}$",
-    "c_dipolar": r"(c) $H_Z+H_{\rm hf}+H_{\rm dip}$",
-    "d_both": r"(d) $H_Z+H_{\rm hf}+H_{\rm ex}+H_{\rm dip}$",
-}
-PREPARATIONS = ["Pz_plus", "P0", "Pz_minus"]
-PREPARATION_LABELS = {
-    "Pz_plus": r"$P_z=+1$",
-    "P0": r"$P_z=0$",
-    "Pz_minus": r"$P_z=-1$",
+PANEL_LABELS = {
+    "a_baseline": "baseline",
+    "b_exchange": "exchange",
+    "c_dipolar": "dipolar",
+    "d_both": "both",
 }
 
-fig, axes = plt.subplots(2, 2, figsize=(11, 9), sharex=True, sharey=True)
+max_cx, max_cy, max_cz = [], [], []
+for panel_key in PANELS:
+    p0 = data[f"{panel_key}_P0"]
+    max_cx.append(np.abs(data[f"{panel_key}_Px"] - p0).max())
+    max_cy.append(np.abs(data[f"{panel_key}_Py"] - p0).max())
+    max_cz.append(np.abs(data[f"{panel_key}_Pz"] - p0).max())
 
-for ax, panel_key in zip(axes.flat, PANELS):
-    for prep in PREPARATIONS:
-        ax.plot(B0_values, data[f"{panel_key}_{prep}"], label=PREPARATION_LABELS[prep])
-    ax.set_title(PANEL_TITLES[panel_key])
+x = np.arange(len(PANELS))
+width = 0.25
 
-for ax in axes[-1, :]:
-    ax.set_xlabel(r"$B_0$ (mT)")
-for ax in axes[:, 0]:
-    ax.set_ylabel(r"$\Phi_S$")
-
-axes[0, 0].legend(fontsize=8)
+fig, ax = plt.subplots(figsize=(7, 4.5))
+ax.bar(x - width, max_cx, width, label=r"$\max|c_x|$")
+ax.bar(x,         max_cy, width, label=r"$\max|c_y|$")
+ax.bar(x + width, max_cz, width, label=r"$\max|c_z|$")
+ax.set_xticks(x)
+ax.set_xticklabels([PANEL_LABELS[p] for p in PANELS])
+ax.set_ylabel(r"$\max_{B_0}|c_\alpha|$")
+ax.legend()
 
 fig.tight_layout()
-fig.savefig("Figure_7/jd_robustness.png", dpi=300)
-print("Saved jd_robustness.png")
+fig.savefig("Figure_7/figure7_offaxis_jd.png", dpi=300)
+print("Saved figure7_offaxis_jd.png")

@@ -1,12 +1,21 @@
 """
-run_figure3_table.py
+run_figure3_table_v2.py
 
 At each of the three marked resonance fields, finds the pair of
-near-degenerate active-manifold eigenstates of H, then computes
+near-degenerate active-manifold eigenstates of H, then computes the
+full ordered-pair diagnostic set for Pz = +1, 0, -1:
 
-    W(Pz) = <Ei|rho0(Pz)|Ei> + <Ej|rho0(Pz)|Ej>
+    w_i    = <Ei|rho0|Ei>
+    w_j    = <Ej|rho0|Ej>
+    rho_ij = <Ei|rho0|Ej>
+    S_ji   = <Ej|P_S|Ei>
+    2Re[rho_ij * S_ji]
+    C_ij   = 2 Re[ k * rho_ij * S_ji / (k + i*(Ei-Ej)) ]
 
-for Pz = +1, 0, -1. Saves a small table (csv) rather than a full sweep.
+Replaces run_figure3_table.py's W = w_i + w_j, which could look large
+even when only one of the two states was populated. C_ij is the exact
+equal-rate interference contribution to the singlet yield; it is only
+computed when K_S == K_T (asserted below), and left blank otherwise.
 
 Separate from run_figure3_main.py: this diagonalizes H directly rather
 than running mesolve, and only touches the three specified fields.
@@ -49,7 +58,7 @@ RESONANCE_B0 = [0.1292, 0.3515, 0.3870]
 # considered "active" rather than part of the degenerate shelving block.
 ACTIVE_WEIGHT_THRESHOLD = 0.5
 
-OUTPUT_FILE = "Figure_3/figure3_table.csv"
+OUTPUT_FILE = "Figure_3/figure3_table_v2.csv"
 
 # ----------------------------------------------------------------------
 builder = RPMBuilder(
@@ -64,6 +73,12 @@ active_op = (
     builder.pop_ops['S'] + builder.pop_ops['Tp']
     + builder.pop_ops['T0'] + builder.pop_ops['Tm']
 )
+P_S = builder.pop_ops['S']
+
+EQUAL_RATES = np.isclose(K_S, K_T)
+if not EQUAL_RATES:
+    print("NOTE: K_S != K_T -- C_ij is only valid for equal rates and "
+          "will be left blank for this run.")
 
 
 def find_active_pair(B0):
@@ -71,7 +86,7 @@ def find_active_pair(B0):
     Diagonalises H at B0, restricts to active-manifold eigenstates
     (active population weight > threshold), and returns the two
     eigenstates with the smallest energy gap among that subset,
-    along with the gap itself for diagnostic purposes.
+    along with their eigenvalues.
     """
     H = builder._build_hamiltonian(B0, THETA, PHI)
     evals, ekets = H.eigenstates()
@@ -96,33 +111,60 @@ def find_active_pair(B0):
     min_gap_pos = np.argmin(gaps)
     i, j = sorted_idx[min_gap_pos], sorted_idx[min_gap_pos + 1]
 
-    return ekets[i], ekets[j], gaps[min_gap_pos], i, j
+    return (ekets[i], ekets[j], sorted_evals[min_gap_pos],
+            sorted_evals[min_gap_pos + 1], i, j)
 
 
-def w_of_pz(B0, ket_i, ket_j, p_val):
+def scalar(x):
+    """Extract a python complex from a 1x1 Qobj or bare number."""
+    return x if np.isscalar(x) else complex(x.full()[0, 0])
+
+
+def pair_diagnostics(ket_i, ket_j, Ei, Ej, p_val):
     rho0 = builder.initial_state(p_val=p_val, pol_axis='z')
-    P_ij = ket_i * ket_i.dag() + ket_j * ket_j.dag()
-    return float(np.real(qt.expect(P_ij, rho0)))
+
+    assert rho0.dims == P_S.dims, (
+        f"Dimension mismatch: rho0.dims={rho0.dims}, P_S.dims={P_S.dims}. "
+        "P_S must be embedded in the full electron-nuclear space."
+    )
+
+    w_i = np.real(scalar(ket_i.dag() * rho0 * ket_i))
+    w_j = np.real(scalar(ket_j.dag() * rho0 * ket_j))
+    rho_ij = scalar(ket_i.dag() * rho0 * ket_j)
+    S_ji = scalar(ket_j.dag() * P_S * ket_i)
+    interference = 2 * np.real(rho_ij * S_ji)
+
+    C_ij = ""
+    if EQUAL_RATES:
+        delta_E = Ei - Ej
+        C_ij = 2 * np.real(K_S * rho_ij * S_ji / (K_S + 1j * delta_E))
+
+    return w_i, w_j, abs(rho_ij), abs(S_ji), interference, C_ij
 
 
 rows = []
 for B0 in RESONANCE_B0:
-    ket_i, ket_j, gap, i, j = find_active_pair(B0)
+    ket_i, ket_j, Ei, Ej, i, j = find_active_pair(B0)
+    gap = Ei - Ej
     print(f"B0={B0} mT: nearest active pair indices ({i}, {j}), gap={gap:.6e}")
 
-    W_plus = w_of_pz(B0, ket_i, ket_j, +1.0)
-    W_zero = w_of_pz(B0, ket_i, ket_j, 0.0)
-    W_minus = w_of_pz(B0, ket_i, ket_j, -1.0)
-
-    rows.append({
-        "B0_mT": B0,
-        "eigenstate_i": i,
-        "eigenstate_j": j,
-        "energy_gap": gap,
-        "W_Pz_plus1": W_plus,
-        "W_Pz_0": W_zero,
-        "W_Pz_minus1": W_minus,
-    })
+    for p_val, label in [(+1.0, "plus1"), (0.0, "0"), (-1.0, "minus1")]:
+        w_i, w_j, abs_rho_ij, abs_S_ji, interference, C_ij = pair_diagnostics(
+            ket_i, ket_j, Ei, Ej, p_val
+        )
+        rows.append({
+            "B0_mT": B0,
+            "eigenstate_i": i,
+            "eigenstate_j": j,
+            "energy_gap": gap,
+            "Pz": label,
+            "w_i": w_i,
+            "w_j": w_j,
+            "abs_rho_ij": abs_rho_ij,
+            "abs_S_ji": abs_S_ji,
+            "2Re_rho_ij_S_ji": interference,
+            "C_ij": C_ij,
+        })
 
 with open(OUTPUT_FILE, "w", newline="") as f:
     writer = csv.DictWriter(f, fieldnames=rows[0].keys())
