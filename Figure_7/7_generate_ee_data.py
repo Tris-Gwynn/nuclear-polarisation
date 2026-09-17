@@ -59,7 +59,7 @@ N_B0 = 5000
 
 OUTPUT_FILE = "Figure_7/figure7_offaxis_jd_data.npz"
 
-N_WORKERS = 16   # one curve per worker: 4 panels x 4 preparations
+N_WORKERS = 28   # match available cores; 16 tasks total so this caps naturally
 
 # ----------------------------------------------------------------------
 PANELS = {
@@ -77,27 +77,30 @@ PREPARATIONS = {
 }
 
 # ----------------------------------------------------------------------
-_worker_builder = None
+_worker_builders = None   # dict: panel_key -> RPMBuilder, built once per worker
 
 
-def _init_worker(panel_key):
-    global _worker_builder
-    panel = PANELS[panel_key]
-    _worker_builder = RPMBuilder(
-        d_spins=[0.5], a_spins=[],
-        a_tensor_d=[A1], a_tensor_a=[],
-        d_tensor=panel["d_tensor"], j_ex=panel["j_ex"],
-        k_s=K_S, k_t=K_T, k_r=K_R,
-        use_ciss=USE_CISS, chi_percent=CHI_PERCENT
-    )
+def _init_worker():
+    global _worker_builders
+    _worker_builders = {
+        panel_key: RPMBuilder(
+            d_spins=[0.5], a_spins=[],
+            a_tensor_d=[A1], a_tensor_a=[],
+            d_tensor=panel["d_tensor"], j_ex=panel["j_ex"],
+            k_s=K_S, k_t=K_T, k_r=K_R,
+            use_ciss=USE_CISS, chi_percent=CHI_PERCENT
+        )
+        for panel_key, panel in PANELS.items()
+    }
 
 
 def _compute_curve(task):
     panel_key, prep_label, p_vec, B0_values = task
+    builder = _worker_builders[panel_key]
     curve = np.zeros(len(B0_values))
     for i, B0 in enumerate(B0_values):
-        rho0 = _worker_builder.initial_state_custom(p_d=[p_vec], p_a=[])
-        S_sh, Tp_sh, T0_sh, Tm_sh = _worker_builder.yield_(
+        rho0 = builder.initial_state_custom(p_d=[p_vec], p_a=[])
+        S_sh, Tp_sh, T0_sh, Tm_sh = builder.yield_(
             B0, theta=THETA_FIELD, phi=PHI_FIELD, rho0=rho0
         )
         curve[i] = S_sh
@@ -107,36 +110,28 @@ def _compute_curve(task):
 if __name__ == "__main__":
     B0_values = np.linspace(B0_MIN, B0_MAX, N_B0)
 
-    results = {}
+    tasks = [
+        (panel_key, prep_label, p_vec, B0_values)
+        for panel_key in PANELS
+        for prep_label, p_vec in PREPARATIONS.items()
+    ]
 
-    for panel_key in PANELS:
-        tasks = [
-            (panel_key, prep_label, p_vec, B0_values)
-            for prep_label, p_vec in PREPARATIONS.items()
-        ]
-        with ProcessPoolExecutor(
-            max_workers=min(N_WORKERS, len(tasks)),
-            initializer=_init_worker,
-            initargs=(panel_key,),
-        ) as executor:
-            for _, prep_label, curve in tqdm(
-                executor.map(_compute_curve, tasks),
-                total=len(tasks),
-                desc=panel_key,
-            ):
-                results[f"{panel_key}_{prep_label}"] = curve
+    results = {}
+    with ProcessPoolExecutor(max_workers=N_WORKERS, initializer=_init_worker) as executor:
+        for panel_key, prep_label, curve in tqdm(
+            executor.map(_compute_curve, tasks),
+            total=len(tasks),
+        ):
+            results[f"{panel_key}_{prep_label}"] = curve
 
     np.savez(OUTPUT_FILE, B0_values=B0_values, **results)
     print(f"Saved to {OUTPUT_FILE}")
 
-    # Diagnostic: max|c_alpha| per panel, to quantify whether J/D
-    # suppress, enhance, or leave untouched each transverse component
-    # individually -- something the old Pz-only test couldn't show.
     print()
     for panel_key in PANELS:
         p0 = results[f"{panel_key}_P0"]
-        cx = results[f"{panel_key}_Px"] - p0
-        cy = results[f"{panel_key}_Py"] - p0
-        cz = results[f"{panel_key}_Pz"] - p0
-        print(f"{panel_key}: max|c_x|={np.abs(cx).max():.4e}, "
-              f"max|c_y|={np.abs(cy).max():.4e}, max|c_z|={np.abs(cz).max():.4e}")
+        delta_phi_x = results[f"{panel_key}_Px"] - p0
+        delta_phi_y = results[f"{panel_key}_Py"] - p0
+        delta_phi_z = results[f"{panel_key}_Pz"] - p0
+        print(f"{panel_key}: max|ΔPhi_x|={np.abs(delta_phi_x).max():.4e}, "
+              f"max|ΔPhi_y|={np.abs(delta_phi_y).max():.4e}, max|ΔPhi_z|={np.abs(delta_phi_z).max():.4e}")

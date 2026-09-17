@@ -1,8 +1,10 @@
 """
 plot_figure6_offaxis_rates.py
 
-Three panels, one per rate case, each showing c_x, c_y, c_z vs B0 at
-the off-axis field.
+Three panels, one per rate case, each showing Delta_Phi_x, Delta_Phi_y,
+Delta_Phi_z vs B0 at the off-axis field.
+
+Delta_Phi_alpha(B0) = Phi_S(P_alpha=1) - Phi_S(P=0).
 """
 import numpy as np
 import matplotlib.pyplot as plt
@@ -23,13 +25,13 @@ fig, axes = plt.subplots(1, 3, figsize=(15, 4.5), sharey=True)
 
 for ax, case_key in zip(axes, CASES):
     p0 = data[f"{case_key}_P0"]
-    ax.plot(B0_values, data[f"{case_key}_Px"] - p0, label=r"$c_x$")
-    ax.plot(B0_values, data[f"{case_key}_Py"] - p0, label=r"$c_y$")
-    ax.plot(B0_values, data[f"{case_key}_Pz"] - p0, label=r"$c_z$")
+    ax.plot(B0_values, data[f"{case_key}_Px"] - p0, label=r"$\Delta\Phi_x$")
+    ax.plot(B0_values, data[f"{case_key}_Py"] - p0, label=r"$\Delta\Phi_y$")
+    ax.plot(B0_values, data[f"{case_key}_Pz"] - p0, label=r"$\Delta\Phi_z$")
     ax.set_xlabel(r"$B_0$ (mT)")
     ax.set_title(CASE_TITLES[case_key])
 
-axes[0].set_ylabel(r"$c_\alpha$")
+axes[0].set_ylabel(r"$\Delta\Phi_\alpha$")
 axes[-1].legend(fontsize=8)
 
 fig.tight_layout()
