@@ -1,24 +1,3 @@
-"""
-run_tolerance_convergence.py
-
-Solver-tolerance convergence check for the Numerical Reliability
-section. Not a curve re-run: at four representative points, compares
-the yield computed with production settings (BDF, default qutip
-tolerances -- matching RPM_Experiment_Builder.py's current
-options={'method': 'bdf', 'nsteps': 1000000}, no rtol/atol override)
-against BDF with tightened tolerances (rtol=1e-9, atol=1e-11).
-
-RPMBuilder.yield_ does not expose a way to override tolerances per
-call, so this reimplements its logic directly using the builder's
-public H/rho0/c_ops/pop_ops construction, exactly as the Figure 3
-diagnostic scripts already do.
-
-Four points:
-  1. one_nucleus, Pz=+1, B0=0.129 mT   (baseline resonance)
-  2. one_nucleus, Pz=+1, B0=0.387 mT   (baseline resonance)
-  3. two_on_donor, P=0,  B0=0.331 mT   (two-nucleus resonance)
-  4. slow_triplet (k_T=0.1), Pz=+1, B0=0.3868 mT (unequal-rate peak)
-"""
 import sys
 sys.path.insert(0, "/home/tristengwynn/nuclear-polarisation/RPM_System")
 

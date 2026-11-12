@@ -1,39 +1,57 @@
-"""
-plot_figure6_offaxis_rates.py
-
-Three panels, one per rate case, each showing Delta_Phi_x, Delta_Phi_y,
-Delta_Phi_z vs B0 at the off-axis field.
-
-Delta_Phi_alpha(B0) = Phi_S(P_alpha=1) - Phi_S(P=0).
-"""
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
 
-INPUT_FILE = "Figure_6/figure6_offaxis_rates.npz"   # PLACEHOLDER: path if different
+sns.set_theme(context="paper", style="ticks", font_scale=1.1)
 
+INPUT_FILE = "Figure_6/figure6_offaxis_rates.npz" 
 data = np.load(INPUT_FILE)
 B0_values = data["B0_values"]
 
-CASES = ["baseline", "half_triplet", "slow_triplet"]
-CASE_TITLES = {
-    "baseline":     r"(a) $k_S=k_T=1.0$",
-    "half_triplet": r"(b) $k_S=1.0,\ k_T=0.5$",
-    "slow_triplet": r"(c) $k_S=1.0,\ k_T=0.1$",
+AXES = ["Px", "Py", "Pz"]
+AXIS_TITLES = {
+    "Px": r"$\Delta\Phi_x$",
+    "Py": r"$\Delta\Phi_y$",
+    "Pz": r"$\Delta\Phi_z$",
+}
+RATES = ["baseline", "half_triplet", "slow_triplet"]
+RATE_LABELS = {
+    "baseline": r"$k_T=1.0$",
+    "half_triplet": r"$k_T=0.5$",
+    "slow_triplet": r"$k_T=0.1$",
 }
 
-fig, axes = plt.subplots(1, 3, figsize=(15, 4.5), sharey=True)
+# Baseline in black, reduced rates on a green ramp (darker = slower)
+greens = sns.color_palette("Greens", as_cmap=True)
+RATE_COLORS = {
+    "baseline": "black",
+    "half_triplet": greens(0.5),
+    "slow_triplet": greens(0.95),
+}
+RATE_STYLES = {
+    "baseline": "--",
+    "half_triplet": "-",
+    "slow_triplet": "-",
+}
 
-for ax, case_key in zip(axes, CASES):
-    p0 = data[f"{case_key}_P0"]
-    ax.plot(B0_values, data[f"{case_key}_Px"] - p0, label=r"$\Delta\Phi_x$")
-    ax.plot(B0_values, data[f"{case_key}_Py"] - p0, label=r"$\Delta\Phi_y$")
-    ax.plot(B0_values, data[f"{case_key}_Pz"] - p0, label=r"$\Delta\Phi_z$")
+fig, axes = plt.subplots(1, 3, figsize=(10, 3), sharey=True)
+
+for ax, axis_key in zip(axes, AXES):
+    for rate in RATES:
+        delta_phi = data[f"{rate}_{axis_key}"] - data[f"{rate}_P0"]
+        ax.plot(B0_values, delta_phi, label=RATE_LABELS[rate],
+                color=RATE_COLORS[rate], linestyle=RATE_STYLES[rate], linewidth=1.4)
+
+    ax.axhline(0.0, color="0.5", linestyle=":", linewidth=0.8, zorder=0)
+    ax.set_xlim(B0_values.min(), B0_values.max())
     ax.set_xlabel(r"$B_0$ (mT)")
-    ax.set_title(CASE_TITLES[case_key])
+    ax.set_title(AXIS_TITLES[axis_key])
 
-axes[0].set_ylabel(r"$\Delta\Phi_\alpha$")
-axes[-1].legend(fontsize=8)
+axes[0].set_ylabel(r"$\Delta\Phi_S$")
+axes[-1].legend(frameon=False, fontsize=8)
 
-fig.tight_layout()
-fig.savefig("Figure_6/figure6_offaxis_rates.png", dpi=300)
-print("Saved figure6_offaxis_rates.png")
+sns.despine(fig=fig)
+fig.tight_layout(w_pad=0.8)
+fig.savefig("Figure_6/figure6_offaxis_rates.png", dpi=300, bbox_inches="tight", pad_inches=0.02)
+fig.savefig("Figure_6/figure6_offaxis_rates.pdf", bbox_inches="tight", pad_inches=0.02)
+print("Saved figure6_offaxis_rates")

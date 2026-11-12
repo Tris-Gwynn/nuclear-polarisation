@@ -1,21 +1,7 @@
-"""
-run_figure4.py
-
-Generates Panel (b) data only: Phi_S(B0) at (theta, phi) = (pi/4, pi/4),
-for the four polarisation preparations (P0, Px, Py, Pz).
-
-Panel (a) reuses figure2_data.npz's Bz_P0/Bz_Px/Bz_Py/Bz_Pz curves
-directly (B parallel z, already computed), so it is not regenerated here.
-
-Same fixed physical parameters as Figures 1-3. Parallelised across
-processes: one worker per preparation.
-"""
 import sys
 sys.path.insert(0, "/home/tristengwynn/nuclear-polarisation/RPM_System")
 
 import os
-# Prevent BLAS/OpenMP oversubscription: each worker process should use a
-# single thread, since parallelism is across processes, not within them.
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 os.environ.setdefault("MKL_NUM_THREADS", "1")
 os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
@@ -37,8 +23,8 @@ A_TENSOR_A = []
 D_TENSOR = None
 J_EX = 0.0
 
-K_S = 1.0                 # PLACEHOLDER: must match Figures 1-3
-K_T = 1.0                 # PLACEHOLDER: must match Figures 1-3
+K_S = 1.0                 #must match Figures 1-3
+K_T = 1.0                 #must match Figures 1-3
 K_R = 0.0
 
 USE_CISS = False
@@ -48,7 +34,7 @@ CHI_PERCENT = 0.0
 THETA, PHI = np.pi / 4, np.pi / 4
 
 # ----------------------------------------------------------------------
-# B0 sweep (PLACEHOLDER: must match Figures 1-3 for a consistent panel)
+# B0 sweep (match the range used in Figures 1-3 for a consistent panel)
 # ----------------------------------------------------------------------
 B0_MIN = 0.0
 B0_MAX = 1.0

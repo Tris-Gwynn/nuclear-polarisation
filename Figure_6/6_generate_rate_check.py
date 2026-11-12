@@ -1,25 +1,3 @@
-"""
-run_figure6_offaxis_rates.py
-
-Replaces run_rate_robustness.py's B-parallel-z test. Same question --
-does the polarisation-dependent response survive k_S != k_T -- but at
-the off-axis field where the transverse (Px, Py) response actually
-exists, and reporting c_x, c_y, c_z rather than just Pz = +1, 0, -1.
-
-Case baseline:      k_S=1.0, k_T=1.0
-Case half_triplet:  k_S=1.0, k_T=0.5   (intermediate point, to check
-                     the transition between the two extremes is
-                     gradual rather than a jump)
-Case slow_triplet:  k_S=1.0, k_T=0.1
-
-Everything else unchanged from Figure 4's one-nucleus setup: same
-tensor, same off-axis field, same B0 sweep. H is identical across
-cases; only the reaction rates entering the collapse operators change.
-
-Parallelised at the (case, preparation, B0-point) level, as in the
-original rate check: 3 cases x 4 preparations = 12 curves is still few
-enough that curve-level parallelism would under-use available cores.
-"""
 import sys
 sys.path.insert(0, "/home/tristengwynn/nuclear-polarisation/RPM_System")
 
@@ -52,8 +30,7 @@ THETA_FIELD, PHI_FIELD = np.pi / 4, np.pi / 4   # off-axis, matches Figure 4
 # ----------------------------------------------------------------------
 B0_MIN = 0.0
 B0_MAX = 1.0
-N_B0 = 500   # PLACEHOLDER: reduce further if slow_triplet's per-point
-             # cost is still high even parallelised
+N_B0 = 500   
 
 OUTPUT_FILE = "Figure_6/figure6_offaxis_rates.npz"
 
@@ -127,9 +104,6 @@ if __name__ == "__main__":
     np.savez(OUTPUT_FILE, B0_values=B0_values, **results)
     print(f"Saved to {OUTPUT_FILE}")
 
-    # Diagnostic: max|c_alpha| per case, to see whether the transverse
-    # response weakens gradually (half_triplet between baseline and
-    # slow_triplet) or jumps.
     for case_key in CASES:
         p0 = results[f"{case_key}_P0"]
         cx = results[f"{case_key}_Px"] - p0

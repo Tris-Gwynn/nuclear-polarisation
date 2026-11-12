@@ -1,8 +1,6 @@
 import sys
 sys.path.insert(0, "/home/tristengwynn/nuclear-polarisation/RPM_System")
 import os
-# Prevent BLAS/OpenMP oversubscription: each worker process should use a
-# single thread, since parallelism is across processes, not within them.
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 os.environ.setdefault("MKL_NUM_THREADS", "1")
 os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
@@ -15,8 +13,8 @@ from RPM_Experiment_Builder import RPMBuilder
 # ----------------------------------------------------------------------
 # Fixed physical parameters (must match Figure 1)
 # ----------------------------------------------------------------------
-D_SPINS = [0.5]          # PLACEHOLDER: donor nuclear spins
-A_SPINS = []              # PLACEHOLDER: acceptor nuclear spins
+D_SPINS = [0.5]          #donor nuclear spins
+A_SPINS = []              #acceptor nuclear spins
 
 A_TENSOR_D = [np.diag([1.0, -0.25, -0.5])]   # mT, one 3x3 tensor per donor nucleus
 A_TENSOR_A = []                               # mT, one 3x3 tensor per acceptor nucleus
@@ -24,15 +22,15 @@ A_TENSOR_A = []                               # mT, one 3x3 tensor per acceptor 
 D_TENSOR = None           # J, D = 0 per spec
 J_EX = 0.0
 
-K_S = 1.0                 # PLACEHOLDER: must match Figure 1
-K_T = 1.0                 # PLACEHOLDER: must match Figure 1
+K_S = 1.0                 
+K_T = 1.0                 
 K_R = 0.0
 
 USE_CISS = False
 CHI_PERCENT = 0.0
 
 # ----------------------------------------------------------------------
-# B0 sweep (PLACEHOLDER: match the refined Figure 1 screening range)
+# B0 sweep (match the refined Figure 1 screening range)
 # ----------------------------------------------------------------------
 B0_MIN = 0.0
 B0_MAX = 1.0
@@ -96,8 +94,6 @@ def _compute_curve(task):
 if __name__ == "__main__":
     B0_values = np.linspace(B0_MIN, B0_MAX, N_B0)
 
-    # One task per (orientation, preparation) combination: 12 tasks total,
-    # each running its own full B0 sweep on a single worker.
     tasks = [
         (orient_label, prep_label, theta, phi, p_val, pol_axis, B0_values)
         for orient_label, (theta, phi) in ORIENTATIONS.items()

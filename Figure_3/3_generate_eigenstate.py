@@ -23,8 +23,8 @@ A_TENSOR_A = []
 D_TENSOR = None
 J_EX = 0.0
 
-K_S = 1.0                 # PLACEHOLDER: must match Figures 1-2
-K_T = 1.0                 # PLACEHOLDER: must match Figures 1-2
+K_S = 1.0                 #must match Figures 1-2
+K_T = 1.0                 #must match Figures 1-2
 K_R = 0.0
 
 USE_CISS = False
@@ -34,7 +34,7 @@ CHI_PERCENT = 0.0
 THETA, PHI = 0.0, 0.0
 
 # ----------------------------------------------------------------------
-# B0 sweep (PLACEHOLDER: match the range used in Figures 1-2)
+# B0 sweep (match the range used in Figures 1-2)
 # ----------------------------------------------------------------------
 B0_MIN = 0.0
 B0_MAX = 1.0
@@ -78,7 +78,5 @@ np.savez(
 )
 print(f"Saved to {OUTPUT_FILE}")
 
-# Consistency check: Phi_S(0) should equal the mean of Phi_S(+1), Phi_S(-1)
-# to numerical precision, given the affine result derived for Figure 2.
 midpoint_check = np.abs(curve_zero - 0.5 * (curve_plus + curve_minus))
 print(f"Max deviation from exact midpoint: {midpoint_check.max():.3e}")

@@ -5,32 +5,32 @@ sys.path.insert(0, "/home/tristengwynn/nuclear-polarisation/RPM_System")
 from RPM_Experiment_Builder import RPMBuilder
 
 # ----------------------------------------------------------------------
-# Fixed physical parameters (edit as needed)
+# Fixed physical parameters
 # ----------------------------------------------------------------------
-D_SPINS = [0.5]          # PLACEHOLDER: donor nuclear spins
-A_SPINS = []              # PLACEHOLDER: acceptor nuclear spins
+D_SPINS = [0.5]          #donor nuclear spins
+A_SPINS = []              #acceptor nuclear spins
 
 A_TENSOR_D = [np.diag([1.0, -0.25, -0.5])]   # mT, one 3x3 tensor per donor nucleus
 A_TENSOR_A = []                               # mT, one 3x3 tensor per acceptor nucleus
 
-D_TENSOR = None           # PLACEHOLDER: 3x3 dipolar tensor (mT), or None
-J_EX = 0.0                # PLACEHOLDER: exchange coupling (mT)
+D_TENSOR = None           #3x3 dipolar tensor (mT), or None
+J_EX = 0.0                #exchange coupling (mT)
 
-K_S = 1.0                 # PLACEHOLDER: singlet reaction rate (MHz)
-K_T = 1.0                 # PLACEHOLDER: triplet reaction rate (MHz)
-K_R = 0.0                 # PLACEHOLDER: CISS backscatter rate (MHz)
+K_S = 1.0                 #singlet reaction rate (MHz)
+K_T = 1.0                 #triplet reaction rate (MHz)
+K_R = 0.0                 #CISS backscatter rate (MHz)
 
-USE_CISS = False          # PLACEHOLDER
-CHI_PERCENT = 0.0         # PLACEHOLDER
+USE_CISS = False          
+CHI_PERCENT = 0.0         
 
-POL_AXIS = 'z'
+POL_AXIS = 'y'
 
 # ----------------------------------------------------------------------
 # Screening sweep settings
 # ----------------------------------------------------------------------
-B0_MIN = 0.0               # PLACEHOLDER: mT
-B0_MAX = 1.0              # PLACEHOLDER: mT
-N_B0 = 5000                 # PLACEHOLDER: number of points
+B0_MIN = 0.0               
+B0_MAX = 1.0              
+N_B0 = 5000                 
 
 OUTPUT_FILE = "Figure_1/screening_data.npz"
 
@@ -46,7 +46,7 @@ builder = RPMBuilder(
 
 def phi_s(B0, p_val):
     """Singlet shelved yield Phi_S at given B0 and P_z."""
-    S_sh, Tp_sh, T0_sh, Tm_sh = builder.yield_(B0, p_val=p_val, pol_axis=POL_AXIS)
+    S_sh, Tp_sh, T0_sh, Tm_sh = builder.yield_(B0, p_val=p_val, pol_axis=POL_AXIS, theta=np.pi/2, phi=np.pi/2)
     return S_sh
 
 

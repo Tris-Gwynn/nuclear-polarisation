@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-SCREENING_FILE = "Figure_1/screening_data.npz"   # PLACEHOLDER: path if different
+SCREENING_FILE = "Figure_1/screening_data.npz"
 
 screening = np.load(SCREENING_FILE)
 B0_values = screening["B0_values"]
@@ -15,5 +15,5 @@ ax.set_ylabel(r"$m(B_0)$")
 ax.set_title("Screening curve")
 
 fig.tight_layout()
-fig.savefig("Figure_1/screening_curve.png", dpi=300)
+fig.savefig("Figure_1/screening_curve_y.png", dpi=300)
 print("Saved screening_curve.png")

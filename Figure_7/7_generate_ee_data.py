@@ -1,22 +1,3 @@
-"""
-run_figure7_offaxis_jd.py
-
-Replaces run_jd_robustness.py's B-parallel-z, Pz-only test. Same four
-panels, same J_VALUE/D0_VALUE placeholders, but at the off-axis field
-where the transverse response exists, reporting c_x, c_y, c_z rather
-than just Pz = +1, 0, -1:
-
-    (a) H_Z + H_hf                  (baseline, J=0, D=0)
-    (b) H_Z + H_hf + H_ex            (J != 0, D=0)
-    (c) H_Z + H_hf + H_dip           (J=0, D != 0)
-    (d) H_Z + H_hf + H_ex + H_dip    (J != 0, D != 0)
-
-J and D0 are PLACEHOLDERS (0.1 mT each), copied from the original
-z-aligned test for continuity -- replace with whatever values are
-already established/justified elsewhere in the thesis if those exist.
-
-One task per (panel, preparation) curve: 16 tasks total.
-"""
 import sys
 sys.path.insert(0, "/home/tristengwynn/nuclear-polarisation/RPM_System")
 
@@ -35,8 +16,8 @@ from RPM_Experiment_Builder import RPMBuilder
 # ----------------------------------------------------------------------
 A1 = np.diag([1.0, -0.25, -0.5])
 
-K_S = 1.0                 # PLACEHOLDER: must match Figures 1-4
-K_T = 1.0                 # PLACEHOLDER: must match Figures 1-4
+K_S = 1.0                 # must match Figures 1-4
+K_T = 1.0                 # must match Figures 1-4
 K_R = 0.0
 
 USE_CISS = False
@@ -44,14 +25,13 @@ CHI_PERCENT = 0.0
 
 THETA_FIELD, PHI_FIELD = np.pi / 4, np.pi / 4   # off-axis, matches Figure 4
 
-# PLACEHOLDER: replace with established values if available, rather
-# than treating 0.1 mT as a considered choice for either parameter.
+
 J_VALUE = 0.1    # mT
 D0_VALUE = 0.1   # mT
 D_TENSOR_ON = D0_VALUE * np.diag([-2/3, -2/3, 4/3])
 
 # ----------------------------------------------------------------------
-# B0 sweep (PLACEHOLDER: must match Figures 1-4)
+# B0 sweep (must match Figures 1-4)
 # ----------------------------------------------------------------------
 B0_MIN = 0.0
 B0_MAX = 1.0
