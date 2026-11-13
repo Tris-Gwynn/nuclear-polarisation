@@ -1,0 +1,21 @@
+1. Hamiltonian assembly check
+   B0=0.512 theta=2.986 phi=0.906  max|dH| = 1.42e-14
+   B0=0.949 theta=0.980 phi=2.660  max|dH| = 1.42e-14
+   B0=0.828 theta=1.286 phi=3.453  max|dH| = 1.42e-14
+2. Closed form vs mesolve (Delta Phi_alpha, theta=phi=pi/4)
+   B0=0.14  x: closed=+0.02800  mesolve=+0.02778  ratio=0.9922
+   B0=0.14  y: closed=+0.02114  mesolve=+0.02133  ratio=1.0093
+   B0=0.14  z: closed=-0.06930  mesolve=-0.06910  ratio=0.9972
+   B0=0.3  x: closed=-0.00587  mesolve=-0.00582  ratio=0.9910
+   B0=0.3  y: closed=+0.02356  mesolve=+0.02341  ratio=0.9933
+   B0=0.3  z: closed=+0.06997  mesolve=+0.06948  ratio=0.9930
+3. Octant symmetry check (|Delta Phi| at n vs |n|)
+   B0=0.062  max diff = 1.35e-03  (values [0.0004 0.0036 0.0054])
+   B0=0.405  max diff = 1.57e-03  (values [0.0543 0.0092 0.0053])
+   B0=0.231  max diff = 2.06e-16  (values [0.0366 0.0052 0.0009])
+   B0=0.176  max diff = 1.39e-02  (values [0.0288 0.0008 0.0194])
+
+  0%|          | 0/343 [00:00<?, ?it/s] 21%|██▏       | 73/343 [00:00<00:00, 700.72it/s] 44%|████▍     | 151/343 [00:00<00:00, 737.98it/s] 66%|██████▌   | 225/343 [00:00<00:00, 737.15it/s] 87%|████████▋ | 299/343 [00:00<00:00, 718.08it/s]100%|██████████| 343/343 [00:00<00:00, 734.21it/s]
+Saved to Figure_8/figure8_orientation_map.npz
+B || z (theta=0) max|dPhi| x,y,z: [0.     0.     0.1632] (expect 0, 0, ~0.163; infinite-time, so ~0.7% above mesolve)
+theta=phi=pi/4  max|dPhi| x,y,z: [0.0533 0.0437 0.0721] (expect ~0.053, 0.044, 0.072, slightly above)

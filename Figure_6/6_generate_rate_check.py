@@ -30,18 +30,23 @@ THETA_FIELD, PHI_FIELD = np.pi / 4, np.pi / 4   # off-axis, matches Figure 4
 # ----------------------------------------------------------------------
 B0_MIN = 0.0
 B0_MAX = 1.0
-N_B0 = 500   
+N_B0 = 5000   
 
-OUTPUT_FILE = "Figure_6/figure6_offaxis_rates.npz"
+OUTPUT_FILE = "Figure_6/figure6_offaxis_half_triplet_5000.npz"
 
 N_WORKERS = 28
 CHUNKSIZE = 4
 
 # ----------------------------------------------------------------------
+"""
 CASES = {
     "baseline":     {"k_s": 1.0, "k_t": 1.0},
     "half_triplet": {"k_s": 1.0, "k_t": 0.5},
     "slow_triplet": {"k_s": 1.0, "k_t": 0.1},
+}
+"""
+CASES = {
+    "half_triplet": {"k_s": 1.0, "k_t": 0.5},
 }
 
 PREPARATIONS = {

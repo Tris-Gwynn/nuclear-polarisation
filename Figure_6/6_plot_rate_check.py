@@ -4,9 +4,16 @@ import seaborn as sns
 
 sns.set_theme(context="paper", style="ticks", font_scale=1.1)
 
-INPUT_FILE = "Figure_6/figure6_offaxis_rates.npz" 
-data = np.load(INPUT_FILE)
-B0_values = data["B0_values"]
+# 5000-point data: equal-rate baseline from Figure 4, reduced triplet rates from the reruns
+FILES = {
+    "baseline":     ("Figure_4/figure4_offaxis_data.npz", ""),
+    "half_triplet": ("Figure_6/figure6_offaxis_half_triplet_5000.npz", "half_triplet_"),
+    "slow_triplet": ("Figure_6/figure6_offaxis_slow_triplet_5000.npz", "slow_triplet_"),
+}
+loaded = {rate: (np.load(path), prefix) for rate, (path, prefix) in FILES.items()}
+B0_values = loaded["baseline"][0]["B0_values"]
+for rate, (d, _) in loaded.items():
+    assert np.allclose(d["B0_values"], B0_values), f"field grid mismatch for {rate}"
 
 AXES = ["Px", "Py", "Pz"]
 AXIS_TITLES = {
@@ -38,7 +45,8 @@ fig, axes = plt.subplots(1, 3, figsize=(10, 3), sharey=True)
 
 for ax, axis_key in zip(axes, AXES):
     for rate in RATES:
-        delta_phi = data[f"{rate}_{axis_key}"] - data[f"{rate}_P0"]
+        d, prefix = loaded[rate]
+        delta_phi = d[f"{prefix}{axis_key}"] - d[f"{prefix}P0"]
         ax.plot(B0_values, delta_phi, label=RATE_LABELS[rate],
                 color=RATE_COLORS[rate], linestyle=RATE_STYLES[rate], linewidth=1.4)
 
